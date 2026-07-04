@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Build output
+frontend/build/
+frontend/dist/
+coverage/
+
+# Logs
+backend/logs/
+*.log
+npm-debug.log*
+
+# Trained ML model artifacts (regenerable via `npm run train:ml`)
+ml-service/model_backups/
+ml-service/acceptance_model.pkl
+ml-service/model_meta.json
+
+# OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / tooling
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# Temp/backup files
+*.tmp
+*.bak
+*.old
+*.orig
+*~
