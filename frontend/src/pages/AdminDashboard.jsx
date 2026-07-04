@@ -320,7 +320,7 @@ function UsersTab({ toast }) {
   useEffect(() => { load(1); }, [search]);
 
   const suspend   = async id => { try { await api.patch(`/admin/users/${id}/suspend`);  toast('User suspended.', 'warning');  load(page); } catch { toast('Failed.','error'); } };
-  const unsuspend = async id => { try { await api.patch(`/admin/users/${id}/unsuspend`); toast('User unsuspended.');           load(page); } catch { toast('Failed.','error'); } };
+  const unsuspend = async id => { try { await api.patch(`/admin/users/${id}/activate`); toast('User unsuspended.');            load(page); } catch { toast('Failed.','error'); } };
   const deleteUser= async id => { if (!window.confirm('Permanently delete this user?')) return; try { await api.delete(`/admin/users/${id}`); toast('Deleted.','warning'); setSelected(null); load(page); } catch { toast('Failed.','error'); } };
 
   return (
@@ -347,12 +347,12 @@ function UsersTab({ toast }) {
                   <td style={{ fontWeight:600, color:'var(--text-primary)' }}>{u.name}</td>
                   <td>{u.email}</td>
                   <td><Badge label={u.role} color={u.role === 'admin' ? 'purple' : u.role === 'guest' ? 'yellow' : 'teal'} /></td>
-                  <td><Badge label={u.isSuspended ? 'Suspended' : 'Active'} color={u.isSuspended ? 'red' : 'green'} /></td>
+                  <td><Badge label={u.status === 'suspended' ? 'Suspended' : 'Active'} color={u.status === 'suspended' ? 'red' : 'green'} /></td>
                   <td style={{ whiteSpace:'nowrap' }}>{fmtDate(u.createdAt)}</td>
                   <td>
                     <div style={{ display:'flex', gap:4 }}>
                       <Btn size="sm" variant="ghost" onClick={() => setSelected(u)}><Ic d={IC.eye} size={13} /></Btn>
-                      {u.role !== 'admin' && (u.isSuspended
+                      {u.role !== 'admin' && (u.status === 'suspended'
                         ? <Btn size="sm" variant="success" onClick={() => unsuspend(u._id)}>Restore</Btn>
                         : <Btn size="sm" variant="warning" onClick={() => suspend(u._id)}>Suspend</Btn>)}
                       {u.role !== 'admin' && <Btn size="sm" variant="danger" onClick={() => deleteUser(u._id)}><Ic d={IC.trash} size={13} /></Btn>}
@@ -372,7 +372,7 @@ function UsersTab({ toast }) {
           <div className="ad-info-row"><span className="ad-info-key">Name</span><span className="ad-info-val">{selected.name}</span></div>
           <div className="ad-info-row"><span className="ad-info-key">Email</span><span className="ad-info-val" style={{ textTransform:'none' }}>{selected.email}</span></div>
           <div className="ad-info-row"><span className="ad-info-key">Role</span><span className="ad-info-val">{selected.role}</span></div>
-          <div className="ad-info-row"><span className="ad-info-key">Status</span><span className="ad-info-val">{selected.isSuspended ? 'Suspended' : 'Active'}</span></div>
+          <div className="ad-info-row"><span className="ad-info-key">Status</span><span className="ad-info-val">{selected.status === 'suspended' ? 'Suspended' : 'Active'}</span></div>
           <div className="ad-info-row"><span className="ad-info-key">Joined</span><span className="ad-info-val">{fmtDate(selected.createdAt)}</span></div>
           {selected.gender && <div className="ad-info-row"><span className="ad-info-key">Gender</span><span className="ad-info-val">{selected.gender}</span></div>}
           {selected.bodyType && <div className="ad-info-row"><span className="ad-info-key">Body type</span><span className="ad-info-val">{selected.bodyType}</span></div>}
@@ -380,7 +380,7 @@ function UsersTab({ toast }) {
             <div className="ad-info-row"><span className="ad-info-key">Styles</span><span className="ad-info-val">{selected.stylePreferences.join(', ')}</span></div>
           )}
           <div className="ad-modal-footer">
-            {selected.role !== 'admin' && (selected.isSuspended
+            {selected.role !== 'admin' && (selected.status === 'suspended'
               ? <Btn variant="success" onClick={() => { unsuspend(selected._id); setSelected(null); }}>Restore</Btn>
               : <Btn variant="warning" onClick={() => { suspend(selected._id); setSelected(null); }}>Suspend</Btn>
             )}
@@ -584,7 +584,7 @@ function RecsTab({ toast }) {
   const loadLogs = useCallback(async (p = 1) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/admin/rec-logs', { params: { page: p, limit: 20 } });
+      const { data } = await api.get('/admin/recommendations', { params: { page: p, limit: 20 } });
       setLogs(data.sessions || []); setLogPages(data.pages || 1); setLogPage(p);
     } catch { toast('Failed to load logs.', 'error'); }
     finally { setLoading(false); }
