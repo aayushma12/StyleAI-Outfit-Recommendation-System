@@ -1,0 +1,196 @@
+.xai-panel {
+  border: 1px solid var(--border-subtle, #E5E7EB);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.xai-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: var(--card-bg, #F9FAFB);
+  border: none;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.xai-toggle:hover {
+  background: var(--hover-bg, #F3F4F6);
+}
+
+.xai-conf-inline {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.01em;
+}
+
+.xai-body {
+  padding: 14px;
+  border-top: 1px solid var(--border-subtle, #E5E7EB);
+  background: var(--panel-bg, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.xai-summary-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.xai-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.xai-metric-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted, #6B7280);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.xai-metric-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.xai-quality-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.xai-quality-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--border-subtle, #E5E7EB);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.xai-quality-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+
+.xai-quality-val {
+  font-size: 0.8rem;
+  font-weight: 700;
+  min-width: 34px;
+  text-align: right;
+}
+
+.xai-contrib-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted, #6B7280);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle, #E5E7EB);
+}
+
+.xai-contrib-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.xai-contrib-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.xai-contrib-label {
+  font-size: 0.77rem;
+  font-weight: 500;
+  color: var(--text-secondary, #374151);
+  width: 120px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.xai-contrib-bar-wrap {
+  flex: 1;
+  height: 10px;
+  background: var(--border-subtle, #E5E7EB);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.xai-contrib-bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.5s ease;
+  opacity: 0.85;
+}
+
+.xai-contrib-pct {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.xai-radar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--border-subtle, #E5E7EB);
+}
+
+.xai-radar-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted, #6B7280);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.xai-note {
+  font-size: 0.73rem;
+  color: var(--text-muted, #9CA3AF);
+  line-height: 1.5;
+  margin: 0;
+  font-style: italic;
+}
+
+@media (max-width: 480px) {
+  .xai-summary-row {
+    grid-template-columns: 1fr;
+  }
+  .xai-contrib-label {
+    width: 90px;
+    font-size: 0.72rem;
+  }
+}
