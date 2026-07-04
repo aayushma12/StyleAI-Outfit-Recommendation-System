@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: outfit_mongo
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: outfit_recommendation
+
+  backend:
+    build: ./backend
+    container_name: outfit_backend
+    ports:
+      - '5000:5000'
+    environment:
+      PORT: 5000
+      MONGO_URI: mongodb://mongodb:27017/outfit_recommendation
+      # Required — compose fails fast instead of silently falling back to a
+      # well-known placeholder secret. Set JWT_SECRET in your shell or a
+      # top-level .env file before running `docker-compose up`.
+      JWT_SECRET: ${JWT_SECRET:?Must set JWT_SECRET before running docker-compose (see .env.example)}
+      JWT_EXPIRE: 7d
+      ML_SERVICE_URL: http://ml-service:8000
+      NODE_ENV: production
+      # CORS origin in production mode (see backend/config/env.js) — override
+      # with your real frontend origin when deploying beyond local compose testing.
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+    depends_on:
+      - mongodb
+
+  ml-service:
+    build: ./ml-service
+    container_name: outfit_ml
+    ports:
+      - '8000:8000'
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/outfit_recommendation
+      PORT: 8000
+    depends_on:
+      - mongodb
+
+  frontend:
+    build: ./frontend
+    container_name: outfit_frontend
+    ports:
+      - '3000:80'
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
