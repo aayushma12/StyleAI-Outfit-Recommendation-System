@@ -773,7 +773,7 @@ function DataSection({ user, setUser, showToast }) {
       )}
 
       <div className="sv-card-footer">
-        <button className="sv-btn sv-btn--outline" onClick={() => {}}>
+        <button className="sv-btn sv-btn--outline" onClick={() => window.open('/legal#privacy', '_blank', 'noopener,noreferrer')}>
           <Ic d={I.link} size={15} />Privacy Policy
         </button>
         <button className="sv-btn sv-btn--primary" onClick={handleSave} disabled={loading}>

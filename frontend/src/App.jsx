@@ -15,6 +15,7 @@ const ResetPassword  = lazy(() => import('./pages/ResetPassword'));
 const VerifyEmail    = lazy(() => import('./pages/VerifyEmail'));
 const NotFound       = lazy(() => import('./pages/NotFound'));
 const Unauthorized   = lazy(() => import('./pages/Unauthorized'));
+const LegalInfo      = lazy(() => import('./pages/LegalInfo'));
 
 // Full-screen spinner shown while a lazy chunk is fetching OR while the startup
 // auth check is in flight.  Uses the app's teal colour token so the brand
@@ -90,6 +91,7 @@ const AppRoutes = () => (
       {/* ── Always-public (no auth check needed) ── */}
       <Route path="/verify-email/:token"   element={<VerifyEmail />} />
       <Route path="/unauthorized"          element={<Unauthorized />} />
+      <Route path="/legal"                 element={<LegalInfo />} />
 
       {/* ── Public-only (redirect authenticated users away) ── */}
       <Route path="/login"

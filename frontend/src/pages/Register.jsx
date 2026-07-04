@@ -353,7 +353,7 @@ export default function Register() {
                 </div>
                 <span>
                   I agree to StyleAI's{' '}
-                  <a href="#!" onClick={e => e.stopPropagation()}>Privacy Policy</a>{' '}
+                  <Link to="/legal#privacy" target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>Privacy Policy</Link>{' '}
                   and consent to my style data being used for personalised outfit recommendations.
                 </span>
               </div>

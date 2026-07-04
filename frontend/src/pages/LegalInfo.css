@@ -1,0 +1,65 @@
+.lg-root {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 48px 20px;
+  background: var(--bg-base);
+}
+
+.lg-card {
+  width: 100%;
+  max-width: 720px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+}
+
+.lg-logo {
+  display: inline-block;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-decoration: none;
+  margin-bottom: 8px;
+}
+
+.lg-note {
+  color: var(--text-primary);
+  opacity: 0.75;
+  font-size: 0.9rem;
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+.lg-section {
+  margin-bottom: 28px;
+  scroll-margin-top: 24px;
+}
+
+.lg-section h2 {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.lg-section p {
+  color: var(--text-primary);
+  opacity: 0.85;
+  line-height: 1.7;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+
+.lg-back {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--clr-accent-600);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.lg-back:hover {
+  text-decoration: underline;
+}

@@ -998,9 +998,9 @@ export default function Landing() {
           <div className="foot-bot">
             <span>© 2026 StyleAI. Built with ❤️ for young women in Kathmandu.</span>
             <div className="foot-legal">
-              <a href="#">Privacy Policy</a>
-              <a href="#">Terms &amp; Conditions</a>
-              <a href="#">Cookie Policy</a>
+              <Link to="/legal#privacy">Privacy Policy</Link>
+              <Link to="/legal#terms">Terms &amp; Conditions</Link>
+              <Link to="/legal#cookies">Cookie Policy</Link>
             </div>
           </div>
         </div>
