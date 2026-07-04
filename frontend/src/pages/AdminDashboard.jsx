@@ -178,9 +178,11 @@ function Spinner({ text = 'Loading…' }) {
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const TABS = [
-  { key:'overview',  label:'Overview',        icon:'overview'  },
-  { key:'users',     label:'Users',           icon:'users'     },
-  { key:'kathmandu', label:'Kathmandu Intel', icon:'mountain'  },
+  { key:'overview',   label:'Overview',        icon:'overview'  },
+  { key:'users',      label:'Users',           icon:'users'     },
+  { key:'moderation', label:'Content',         icon:'wardrobe'  },
+  { key:'catalog',    label:'Outfit Catalog',  icon:'outfits'   },
+  { key:'kathmandu',  label:'Kathmandu Intel', icon:'mountain'  },
   { key:'recs',      label:'Recommendations', icon:'recs'      },
   { key:'ml',        label:'ML Model',        icon:'ml'        },
   { key:'feedback',  label:'Feedback',        icon:'feedback'  },
@@ -554,6 +556,385 @@ function KathmanduTab({ toast }) {
         <Modal title="Confirm Delete" onClose={() => setConfirmDel(null)}>
           <p style={{ color:'var(--text-secondary)', fontSize:'0.875rem' }}>
             Delete <strong>{confirmDel.name}</strong>? This cannot be undone.
+          </p>
+          <div className="ad-modal-footer">
+            <Btn variant="outline" onClick={() => setConfirmDel(null)}>Cancel</Btn>
+            <Btn variant="danger" onClick={() => del(confirmDel._id)}>Delete</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── CONTENT MODERATION TAB (wardrobe / saved outfits / calendar) ──────────────
+const WARDROBE_CATEGORIES = ['tops', 'bottoms', 'dresses', 'jackets', 'footwear', 'accessories', 'traditional'];
+
+function WardrobeMonitorPanel({ toast }) {
+  const [items,   setItems]   = useState([]);
+  const [total,   setTotal]   = useState(0);
+  const [pages,   setPages]   = useState(1);
+  const [page,    setPage]    = useState(1);
+  const [search,  setSearch]  = useState('');
+  const [catF,    setCatF]    = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async (p = 1) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/wardrobe', { params: { page: p, limit: 16, search, category: catF } });
+      setItems(data.items); setTotal(data.total); setPages(data.pages); setPage(p);
+    } catch { toast('Failed to load wardrobe items.', 'error'); }
+    finally { setLoading(false); }
+  }, [search, catF]);
+
+  useEffect(() => { load(1); }, [search, catF]);
+
+  const del = async id => {
+    if (!window.confirm('Delete this wardrobe item? This cannot be undone.')) return;
+    try { await api.delete(`/admin/wardrobe/${id}`); toast('Item deleted.', 'warning'); load(page); }
+    catch { toast('Failed.', 'error'); }
+  };
+
+  return (
+    <div>
+      <div className="ad-toolbar">
+        <div className="ad-search">
+          <span className="ad-search-icon"><Ic d={IC.search} size={14} /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search item name…" />
+        </div>
+        <select value={catF} onChange={e => setCatF(e.target.value)} className="ad-select">
+          <option value="">All categories</option>
+          {WARDROBE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <span className="ad-toolbar-count">{fmt(total)} items</span>
+      </div>
+
+      {loading ? <Spinner /> : (
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead><tr>{['Item','Owner','Category','Color','Added','Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead>
+            <tbody>
+              {items.map(it => (
+                <tr key={it._id}>
+                  <td style={{ fontWeight:600, color:'var(--text-primary)' }}>{it.name}</td>
+                  <td>{it.user?.name || 'Unknown'}<div style={{ fontSize:'0.72rem', color:'var(--text-muted)' }}>{it.user?.email}</div></td>
+                  <td><Badge label={it.category} color="teal" /></td>
+                  <td style={{ textTransform:'capitalize' }}>{it.color || '—'}</td>
+                  <td style={{ whiteSpace:'nowrap' }}>{fmtDate(it.createdAt)}</td>
+                  <td><Btn size="sm" variant="danger" onClick={() => del(it._id)}><Ic d={IC.trash} size={13} /></Btn></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {items.length === 0 && <div className="ad-table-empty">No wardrobe items found.</div>}
+        </div>
+      )}
+      <Pagination page={page} pages={pages} onPage={load} />
+    </div>
+  );
+}
+
+function SavedOutfitsPanel({ toast }) {
+  const [combos,  setCombos]  = useState([]);
+  const [total,   setTotal]   = useState(0);
+  const [pages,   setPages]   = useState(1);
+  const [page,    setPage]    = useState(1);
+  const [search,  setSearch]  = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async (p = 1) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/saved-outfits', { params: { page: p, limit: 16, search } });
+      setCombos(data.combinations); setTotal(data.total); setPages(data.pages); setPage(p);
+    } catch { toast('Failed to load saved outfits.', 'error'); }
+    finally { setLoading(false); }
+  }, [search]);
+
+  useEffect(() => { load(1); }, [search]);
+
+  const del = async id => {
+    if (!window.confirm('Delete this saved outfit? This cannot be undone.')) return;
+    try { await api.delete(`/admin/saved-outfits/${id}`); toast('Outfit deleted.', 'warning'); load(page); }
+    catch { toast('Failed.', 'error'); }
+  };
+
+  return (
+    <div>
+      <div className="ad-toolbar">
+        <div className="ad-search">
+          <span className="ad-search-icon"><Ic d={IC.search} size={14} /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search outfit name…" />
+        </div>
+        <span className="ad-toolbar-count">{fmt(total)} saved outfits</span>
+      </div>
+
+      {loading ? <Spinner /> : (
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead><tr>{['Outfit','Owner','Items','Match Score','Saved','Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead>
+            <tbody>
+              {combos.map(c => (
+                <tr key={c._id}>
+                  <td style={{ fontWeight:600, color:'var(--text-primary)' }}>{c.name || 'Unnamed Outfit'}</td>
+                  <td>{c.user?.name || 'Unknown'}<div style={{ fontSize:'0.72rem', color:'var(--text-muted)' }}>{c.user?.email}</div></td>
+                  <td>{c.items?.length || 0}</td>
+                  <td>{c.matchScore != null ? `${c.matchScore}%` : '—'}</td>
+                  <td style={{ whiteSpace:'nowrap' }}>{fmtDate(c.createdAt)}</td>
+                  <td><Btn size="sm" variant="danger" onClick={() => del(c._id)}><Ic d={IC.trash} size={13} /></Btn></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {combos.length === 0 && <div className="ad-table-empty">No saved outfits found.</div>}
+        </div>
+      )}
+      <Pagination page={page} pages={pages} onPage={load} />
+    </div>
+  );
+}
+
+function CalendarMonitorPanel({ toast }) {
+  const [entries, setEntries] = useState([]);
+  const [total,   setTotal]   = useState(0);
+  const [pages,   setPages]   = useState(1);
+  const [page,    setPage]    = useState(1);
+  const [search,  setSearch]  = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async (p = 1) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/calendar', { params: { page: p, limit: 16, search } });
+      setEntries(data.entries); setTotal(data.total); setPages(data.pages); setPage(p);
+    } catch { toast('Failed to load calendar entries.', 'error'); }
+    finally { setLoading(false); }
+  }, [search]);
+
+  useEffect(() => { load(1); }, [search]);
+
+  const del = async id => {
+    if (!window.confirm('Delete this calendar entry? This cannot be undone.')) return;
+    try { await api.delete(`/admin/calendar/${id}`); toast('Entry deleted.', 'warning'); load(page); }
+    catch { toast('Failed.', 'error'); }
+  };
+
+  return (
+    <div>
+      <div className="ad-toolbar">
+        <div className="ad-search">
+          <span className="ad-search-icon"><Ic d={IC.search} size={14} /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search owner or outfit name…" />
+        </div>
+        <span className="ad-toolbar-count">{fmt(total)} entries</span>
+      </div>
+
+      {loading ? <Spinner /> : (
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead><tr>{['Owner','Outfit / Combo','Occasion','Date','Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead>
+            <tbody>
+              {entries.map(e => (
+                <tr key={e._id}>
+                  <td style={{ fontWeight:600, color:'var(--text-primary)' }}>{e.user?.name || 'Unknown'}<div style={{ fontSize:'0.72rem', color:'var(--text-muted)', fontWeight:400 }}>{e.user?.email}</div></td>
+                  <td>{e.outfitName || e.combo?.name || '—'}</td>
+                  <td style={{ textTransform:'capitalize' }}>{e.occasion || '—'}</td>
+                  <td style={{ whiteSpace:'nowrap' }}>{fmtDate(e.date)}</td>
+                  <td><Btn size="sm" variant="danger" onClick={() => del(e._id)}><Ic d={IC.trash} size={13} /></Btn></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {entries.length === 0 && <div className="ad-table-empty">No calendar entries found.</div>}
+        </div>
+      )}
+      <Pagination page={page} pages={pages} onPage={load} />
+    </div>
+  );
+}
+
+function ModerationTab({ toast }) {
+  const [view, setView] = useState('wardrobe');
+  return (
+    <div>
+      <div className="ad-toolbar" style={{ marginBottom:20 }}>
+        {[['wardrobe','Wardrobe'],['saved','Saved Outfits'],['calendar','Calendar']].map(([k,l]) => (
+          <button key={k} onClick={() => setView(k)}
+            className={`ad-btn${view===k ? ' ad-btn-primary' : ' ad-btn-outline'}`}>{l}</button>
+        ))}
+      </div>
+      {view === 'wardrobe' && <WardrobeMonitorPanel toast={toast} />}
+      {view === 'saved'    && <SavedOutfitsPanel   toast={toast} />}
+      {view === 'calendar' && <CalendarMonitorPanel toast={toast} />}
+    </div>
+  );
+}
+
+// ── OUTFIT CATALOG TAB ────────────────────────────────────────────────────────
+const CATALOG_CATEGORIES = ['tops', 'bottoms', 'dresses', 'outerwear', 'footwear', 'accessories', 'traditional', 'full_outfit'];
+const blankOutfit = () => ({ name:'', description:'', category:'tops', style:'', occasion:'', season:'', colors:'', fabric:'', brand:'', price:'', imageUrl:'', tags:'', isActive:true });
+
+function CatalogTab({ toast }) {
+  const [outfits,    setOutfits]    = useState([]);
+  const [total,      setTotal]      = useState(0);
+  const [pages,      setPages]      = useState(1);
+  const [page,       setPage]       = useState(1);
+  const [search,     setSearch]     = useState('');
+  const [catF,       setCatF]       = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [modal,      setModal]      = useState(null);
+  const [form,       setForm]       = useState(blankOutfit());
+  const [saving,     setSaving]     = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null);
+
+  const load = useCallback(async (p = 1) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/outfits', { params: { page: p, limit: 16, search, category: catF } });
+      setOutfits(data.outfits); setTotal(data.total); setPages(data.pages); setPage(p);
+    } catch { toast('Failed to load outfit catalog.', 'error'); }
+    finally { setLoading(false); }
+  }, [search, catF]);
+
+  useEffect(() => { load(1); }, [search, catF]);
+
+  const toArr = s => s.split(',').map(x => x.trim()).filter(Boolean);
+
+  const save = async () => {
+    if (!form.name || !form.category) return toast('Name and category are required.', 'error');
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        style:    toArr(form.style),
+        occasion: toArr(form.occasion),
+        season:   toArr(form.season),
+        colors:   toArr(form.colors),
+        tags:     toArr(form.tags),
+        price:    form.price === '' ? null : Number(form.price),
+      };
+      if (modal === 'create') { await api.post('/admin/outfits', payload);            toast('Outfit added to catalog.'); }
+      else                    { await api.put(`/admin/outfits/${form._id}`, payload); toast('Outfit updated.'); }
+      setModal(null); load(page);
+    } catch (e) { toast(e.response?.data?.message || 'Save failed.', 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const approve = async id => {
+    try { await api.patch(`/admin/outfits/${id}/approve`); toast('Outfit approved.'); load(page); }
+    catch { toast('Failed.', 'error'); }
+  };
+
+  const del = async id => {
+    try { await api.delete(`/admin/outfits/${id}`); toast('Deleted.', 'warning'); setConfirmDel(null); load(page); }
+    catch { toast('Failed.', 'error'); }
+  };
+
+  return (
+    <div>
+      <div className="ad-page-hd">
+        <div>
+          <h3 className="ad-page-title">Outfit Catalog</h3>
+          <p className="ad-page-sub">Curated outfit entries independent of any user's personal wardrobe.</p>
+        </div>
+        <div className="ad-page-actions">
+          <select value={catF} onChange={e => setCatF(e.target.value)} className="ad-select">
+            <option value="">All categories</option>
+            {CATALOG_CATEGORIES.map(c => <option key={c} value={c}>{c.replace('_',' ')}</option>)}
+          </select>
+          <Btn onClick={() => { setForm(blankOutfit()); setModal('create'); }}>
+            <Ic d={IC.plus} size={14} /> Add Outfit
+          </Btn>
+        </div>
+      </div>
+
+      <div className="ad-toolbar" style={{ marginBottom:14 }}>
+        <div className="ad-search">
+          <span className="ad-search-icon"><Ic d={IC.search} size={14} /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search catalog…" />
+        </div>
+        <span className="ad-toolbar-count">{fmt(total)} outfits</span>
+      </div>
+
+      {loading ? <Spinner /> : outfits.length === 0 ? (
+        <div className="ad-empty">
+          <div className="ad-empty-icon"><Ic d={IC.outfits} size={26} /></div>
+          <div className="ad-empty-title">No catalog outfits yet</div>
+          <div className="ad-empty-sub">Add curated outfits here — independent of any individual user's wardrobe.</div>
+        </div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {outfits.map(o => (
+            <div key={o._id} className="ad-list-card">
+              <div className="ad-list-card-body">
+                <div className="ad-list-card-hd">
+                  <span className="ad-list-card-title">{o.name}</span>
+                  <Badge label={o.category.replace('_',' ')} color="blue" />
+                  <Badge label={o.isApproved ? 'Approved' : 'Pending'} color={o.isApproved ? 'green' : 'yellow'} />
+                  <Badge label={o.isActive ? 'Active' : 'Inactive'} color={o.isActive ? 'green' : 'gray'} />
+                </div>
+                <div className="ad-list-card-meta">
+                  {o.occasion?.length > 0 && <span>Occasion: {o.occasion.join(', ')}</span>}
+                  {o.season?.length > 0 && <span>Season: {o.season.join(', ')}</span>}
+                  {o.brand && <span>Brand: {o.brand}</span>}
+                  {o.price != null && <span>Price: {o.price}</span>}
+                </div>
+                {o.description && <div className="ad-list-card-note">{o.description}</div>}
+              </div>
+              <div className="ad-list-card-btns">
+                {!o.isApproved && <Btn size="sm" variant="success" onClick={() => approve(o._id)}>Approve</Btn>}
+                <Btn size="sm" variant="outline" onClick={() => {
+                  setForm({ ...o, style:(o.style||[]).join(', '), occasion:(o.occasion||[]).join(', '), season:(o.season||[]).join(', '), colors:(o.colors||[]).join(', '), tags:(o.tags||[]).join(', '), price: o.price ?? '' });
+                  setModal('edit');
+                }}><Ic d={IC.edit} size={12} /> Edit</Btn>
+                <Btn size="sm" variant="danger" onClick={() => setConfirmDel(o)}><Ic d={IC.trash} size={12} /></Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <Pagination page={page} pages={pages} onPage={load} />
+
+      {(modal === 'create' || modal === 'edit') && (
+        <Modal title={modal === 'create' ? 'Add Catalog Outfit' : 'Edit Outfit'} onClose={() => setModal(null)}>
+          <Inp label="Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Monsoon-Ready Office Look" />
+          <Sel label="Category *" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
+            {CATALOG_CATEGORIES.map(c => <option key={c} value={c}>{c.replace('_',' ')}</option>)}
+          </Sel>
+          <Inp label="Style (comma-separated)" value={form.style} onChange={e => setForm(p => ({ ...p, style: e.target.value }))} placeholder="minimalist, korean" />
+          <Inp label="Occasion (comma-separated)" value={form.occasion} onChange={e => setForm(p => ({ ...p, occasion: e.target.value }))} placeholder="office, daily" />
+          <Inp label="Season (comma-separated)" value={form.season} onChange={e => setForm(p => ({ ...p, season: e.target.value }))} placeholder="monsoon, autumn" />
+          <Inp label="Colors (comma-separated)" value={form.colors} onChange={e => setForm(p => ({ ...p, colors: e.target.value }))} placeholder="black, white" />
+          <div className="ad-form-2">
+            <Inp label="Fabric" value={form.fabric} onChange={e => setForm(p => ({ ...p, fabric: e.target.value }))} />
+            <Inp label="Brand" value={form.brand} onChange={e => setForm(p => ({ ...p, brand: e.target.value }))} />
+          </div>
+          <div className="ad-form-2">
+            <Inp label="Price" type="number" min="0" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} />
+            <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:22 }}>
+              <input type="checkbox" id="cat-active" checked={form.isActive} onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))} />
+              <label htmlFor="cat-active" style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--text-secondary)', cursor:'pointer' }}>Active</label>
+            </div>
+          </div>
+          <Inp label="Image URL" value={form.imageUrl} onChange={e => setForm(p => ({ ...p, imageUrl: e.target.value }))} placeholder="https://…" />
+          <Inp label="Tags (comma-separated)" value={form.tags} onChange={e => setForm(p => ({ ...p, tags: e.target.value }))} />
+          <div className="ad-field">
+            <label className="ad-field-label">Description</label>
+            <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              rows={2} className="ad-input ad-textarea" />
+          </div>
+          <div className="ad-modal-footer">
+            <Btn variant="outline" onClick={() => setModal(null)}>Cancel</Btn>
+            <Btn onClick={save} disabled={saving}>{saving ? 'Saving…' : modal === 'create' ? 'Add Outfit' : 'Save'}</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {confirmDel && (
+        <Modal title="Confirm Delete" onClose={() => setConfirmDel(null)}>
+          <p style={{ color:'var(--text-secondary)', fontSize:'0.875rem' }}>
+            Delete <strong>{confirmDel.name}</strong> from the catalog? This cannot be undone.
           </p>
           <div className="ad-modal-footer">
             <Btn variant="outline" onClick={() => setConfirmDel(null)}>Cancel</Btn>
@@ -1214,9 +1595,11 @@ export default function AdminDashboard() {
   const navigate = key => { setTab(key); setMobileOpen(false); };
 
   const CONTENT = {
-    overview:  <OverviewTab      toast={toast} />,
-    users:     <UsersTab         toast={toast} />,
-    kathmandu: <KathmanduTab     toast={toast} />,
+    overview:   <OverviewTab      toast={toast} />,
+    users:      <UsersTab         toast={toast} />,
+    moderation: <ModerationTab    toast={toast} />,
+    catalog:    <CatalogTab       toast={toast} />,
+    kathmandu:  <KathmanduTab     toast={toast} />,
     recs:      <RecsTab          toast={toast} />,
     ml:        <MLTab            toast={toast} />,
     feedback:  <FeedbackTab      toast={toast} />,
