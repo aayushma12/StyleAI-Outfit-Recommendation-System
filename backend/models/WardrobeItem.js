@@ -62,7 +62,7 @@ const wardrobeItemSchema = new mongoose.Schema({
     extractedAt: { type: Date, default: null },
     provider: {
       type: String,
-      enum: ['gemini', 'anthropic', 'groq', 'color-only', 'manual', ''],
+      enum: ['gemini', 'color-only', 'manual', ''],
       default: '',
     },
     fieldConfidence: { type: mongoose.Schema.Types.Mixed, default: {} }, // per-field 0-1

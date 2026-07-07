@@ -24,22 +24,15 @@ module.exports = function validateEnv() {
     console.warn('[StyleAI] CLIENT_URL is not set — CORS will block all cross-origin requests from your frontend in this environment.');
   }
 
-  const aiKey = process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY;
-  if (!aiKey) {
+  if (!process.env.GEMINI_API_KEY) {
     console.warn('[StyleAI] No AI key set — AI Fashion Assistant will be disabled.');
-    console.warn('[StyleAI] Add one of these to backend/.env:');
-    console.warn('[StyleAI]   GEMINI_API_KEY    (free)  -> aistudio.google.com');
-    console.warn('[StyleAI]   GROQ_API_KEY      (free)  -> console.groq.com');
-    console.warn('[StyleAI]   ANTHROPIC_API_KEY (paid)  -> console.anthropic.com');
+    console.warn('[StyleAI] Add GEMINI_API_KEY to backend/.env -> aistudio.google.com/app/apikey (free)');
   } else {
-    const provider = process.env.ANTHROPIC_API_KEY ? 'Anthropic Claude'
-                   : process.env.GEMINI_API_KEY    ? 'Google Gemini'
-                   : 'Groq';
-    console.log(`[StyleAI] AI provider: ${provider}`);
+    console.log('[StyleAI] AI provider: Google Gemini');
   }
 
   const cloudVars = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'];
-  const missingCloud = cloudVars.filter(k => !process.env[k] || process.env[k] === '');
+  const missingCloud = cloudVars.filter(k => !process.env[k] || process.env[k].startsWith('your_'));
   if (missingCloud.length) {
     console.warn(`[StyleAI] Cloudinary not configured — image uploads disabled. Missing: ${missingCloud.join(', ')}`);
   }

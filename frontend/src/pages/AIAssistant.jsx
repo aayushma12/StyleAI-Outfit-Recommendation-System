@@ -211,7 +211,6 @@ export default function AIAssistant({ initialPrompt, onPromptConsumed }) {
   const [searchQuery,    setSearchQuery]     = useState('');
   const [searchResults,  setSearchResults]   = useState(null);
   const [searching,      setSearching]       = useState(false);
-  const [exporting,      setExporting]       = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef       = useRef(null);
@@ -414,7 +413,6 @@ export default function AIAssistant({ initialPrompt, onPromptConsumed }) {
 
   const exportConversation = async (convId, e) => {
     e.stopPropagation();
-    setExporting(true);
     try {
       const resp = await api.get(`/ai/conversations/${convId}/export`, { responseType: 'blob' });
       const url  = URL.createObjectURL(resp.data);
@@ -426,8 +424,6 @@ export default function AIAssistant({ initialPrompt, onPromptConsumed }) {
       showToast('Conversation exported', 'success');
     } catch {
       showToast('Export failed', 'error');
-    } finally {
-      setExporting(false);
     }
   };
 
@@ -577,25 +573,13 @@ export default function AIAssistant({ initialPrompt, onPromptConsumed }) {
               <div className="ai-setup">
                 <div className="ai-setup-icon">{Ico.sparkle(40, '#0D9488')}</div>
                 <h2 className="ai-setup-title">Connect an AI provider to get started</h2>
-                <p className="ai-setup-sub">The AI Fashion Advisor requires an API key. All options below include a <strong>free tier</strong> — no payment is necessary to get started.</p>
+                <p className="ai-setup-sub">The AI Fashion Advisor requires a free Google Gemini API key to get started — no payment necessary.</p>
                 <div className="ai-setup-options">
                   <a className="ai-setup-opt ai-setup-opt--recommended" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">
-                    <span className="ai-setup-opt-badge">Recommended · Free</span>
+                    <span className="ai-setup-opt-badge">Free</span>
                     <div className="ai-setup-opt-name">Google Gemini</div>
                     <div className="ai-setup-opt-desc">1,500 free requests/day · No credit card required · Fast response times</div>
                     <div className="ai-setup-opt-key">Set <code>GEMINI_API_KEY</code> in backend/.env</div>
-                  </a>
-                  <a className="ai-setup-opt" href="https://console.groq.com/keys" target="_blank" rel="noreferrer">
-                    <span className="ai-setup-opt-badge">Free</span>
-                    <div className="ai-setup-opt-name">Groq (Llama 3.3)</div>
-                    <div className="ai-setup-opt-desc">High-speed inference · Open-source model · Free tier available</div>
-                    <div className="ai-setup-opt-key">Set <code>GROQ_API_KEY</code> in backend/.env</div>
-                  </a>
-                  <a className="ai-setup-opt" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
-                    <span className="ai-setup-opt-badge">Paid</span>
-                    <div className="ai-setup-opt-name">Anthropic Claude</div>
-                    <div className="ai-setup-opt-desc">Highest response quality · Advanced reasoning · Requires credits</div>
-                    <div className="ai-setup-opt-key">Set <code>ANTHROPIC_API_KEY</code> in backend/.env</div>
                   </a>
                 </div>
                 <p className="ai-setup-restart">After adding the key to <code>backend/.env</code>, restart the backend server.</p>

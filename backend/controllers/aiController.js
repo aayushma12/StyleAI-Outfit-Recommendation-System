@@ -13,8 +13,6 @@ const recommendationEngine = require('../services/recommendationEngine');
 const groundingService = require('../services/groundingService');
 const { escapeRegex }  = require('../utils/validation');
 
-const PROVIDER_NAMES = { anthropic: 'Claude (Anthropic)', gemini: 'Gemini (Google)', groq: 'Llama (Groq)' };
-
 // ── Outfit-request intent detection ──────────────────────────────────────────
 // When the user is clearly asking "what should I wear", route through the
 // SAME deterministic recommendation pipeline the dashboard uses instead of
@@ -300,7 +298,7 @@ exports.getProvider = async (req, res) => {
   res.json({
     configured: !!provider,
     provider,
-    name: provider ? PROVIDER_NAMES[provider] : null,
+    name: aiProvider.getActiveProviderLabel(),
   });
 };
 
@@ -312,7 +310,7 @@ exports.sendMessage = async (req, res) => {
   const provider = aiProvider.getActiveProvider();
   if (!provider) {
     return res.status(503).json({
-      message: 'AI Assistant needs an API key. Add one of these to backend/.env:\n• GEMINI_API_KEY (free) — get at aistudio.google.com\n• GROQ_API_KEY (free) — get at console.groq.com\n• ANTHROPIC_API_KEY (paid) — get at console.anthropic.com',
+      message: 'AI Assistant needs an API key. Add GEMINI_API_KEY to backend/.env — get a free key at aistudio.google.com/app/apikey.',
     });
   }
 
@@ -390,7 +388,7 @@ exports.sendMessage = async (req, res) => {
     console.error('[aiController] chat error:', err.message);
     const msg = err.message || '';
     if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('quota')) {
-      return res.status(429).json({ message: 'AI quota exceeded. Your free API key has no remaining quota. Please use a Groq key instead — sign up free at console.groq.com, get an API key, then set GROQ_API_KEY in backend/.env and restart the server.' });
+      return res.status(429).json({ message: 'AI quota exceeded. Please wait a few minutes and try again, or check your Gemini API usage limits at aistudio.google.com.' });
     }
     if (msg.includes('401') || msg.includes('API_KEY') || msg.includes('INVALID_ARGUMENT') || msg.includes('Authentication')) {
       return res.status(400).json({ message: 'AI API key is invalid or expired. Check your key in backend/.env.' });
@@ -412,7 +410,7 @@ exports.sendMessage = async (req, res) => {
   logActivity(userId, {
     action: 'ai_interaction', category: 'ai',
     title:  `AI chat: "${userMsg.slice(0, 50)}${userMsg.length > 50 ? '…' : ''}"`,
-    description: `via ${PROVIDER_NAMES[provider] || 'AI'}`,
+    description: `via ${aiProvider.getActiveProviderLabel() || 'AI'}`,
     refId: conv._id,
   });
 

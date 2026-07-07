@@ -18,7 +18,8 @@ async function registerAndGetToken(email) {
 }
 
 beforeEach(() => {
-  aiProvider.getActiveProvider.mockReturnValue('groq');
+  aiProvider.getActiveProvider.mockReturnValue('gemini');
+  aiProvider.getActiveProviderLabel.mockReturnValue('Google Gemini');
 });
 
 describe('POST /api/ai/chat — outfit-intent routing persists recommendationSessionId', () => {
