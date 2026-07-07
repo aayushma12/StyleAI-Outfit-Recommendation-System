@@ -1,4 +1,4 @@
-const { v2: cloudinary } = require('cloudinary');
+const cloudinary     = require('../config/cloudinary');
 const WardrobeItem  = require('../models/WardrobeItem');
 const WardrobeCombo = require('../models/WardrobeCombo');
 const logActivity   = require('../utils/historyLogger');
@@ -6,7 +6,6 @@ const { logBehavior } = require('../services/behaviorService');
 const visionExtraction = require('../services/visionExtractionService');
 const { escapeRegex } = require('../utils/validation');
 const { isAllowedImageUrl } = require('../utils/urlSafety');
-// Cloudinary is configured centrally in config/cloudinary.js (required at startup)
 
 const AI_METADATA_FIELDS = [
   'subcategory', 'colorHex', 'fit', 'formalityLevel', 'layeringLevel', 'sleeveLength',
