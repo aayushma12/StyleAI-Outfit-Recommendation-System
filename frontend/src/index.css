@@ -635,3 +635,16 @@ body.dark-mode .empty-state-icon {
 .gap-2       { gap: 8px; }
 .gap-3       { gap: 12px; }
 .gap-4       { gap: 16px; }
+
+/* Responsive — shared global components */
+
+@media (max-width: 640px) {
+  .page-container { padding: 20px 14px; }
+  .modal-header, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; }
+  .modal-footer { flex-wrap: wrap; }
+  .toast { left: 16px; right: 16px; bottom: 16px; max-width: none; }
+}
+
+@media (max-width: 480px) {
+  .btn-primary, .btn-outline, .btn-ghost, .btn-danger { padding: 10px 16px; font-size: 0.85rem; }
+}

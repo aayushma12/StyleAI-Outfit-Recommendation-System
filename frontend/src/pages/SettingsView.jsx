@@ -436,7 +436,7 @@ function PasswordInput({ value, onChange, show, onToggle, placeholder, error }) 
     <div className={`sv-pw-wrap ${error ? 'sv-pw-wrap--error' : ''}`}>
       <input className="sv-input sv-pw-input" type={show ? 'text' : 'password'}
         value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} />
-      <button className="sv-pw-eye" onClick={onToggle} tabIndex={-1}>
+      <button className="sv-pw-eye" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'}>
         <Ic d={show ? I.eye_off : I.eye} size={16} />
       </button>
     </div>

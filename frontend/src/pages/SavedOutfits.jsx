@@ -40,7 +40,7 @@ function OutfitDetailModal({ combo, onClose, onDelete }) {
       <div className="so-modal">
         <div className="so-modal-hd">
           <h3>{combo.name || 'Unnamed Outfit'}</h3>
-          <button className="so-modal-close" onClick={onClose}><Ic d={I.close} size={16} /></button>
+          <button className="so-modal-close" onClick={onClose} aria-label="Close dialog"><Ic d={I.close} size={16} /></button>
         </div>
         <div className="so-modal-body">
           {combo.occasion && (

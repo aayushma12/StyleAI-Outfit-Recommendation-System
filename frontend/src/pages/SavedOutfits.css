@@ -494,3 +494,22 @@
 .so-btn:hover { opacity: 0.88; }
 .so-btn--danger { background: var(--clr-error-bg); color: var(--clr-error); }
 .so-btn--ghost { background: var(--bg-base); color: var(--text-secondary); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .so-root { padding: 20px 16px; }
+  .so-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+}
+
+@media (max-width: 640px) {
+  .so-toolbar { flex-direction: column; align-items: stretch; }
+  .so-toolbar-right { flex-wrap: wrap; }
+  .so-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .so-modal { width: 94vw; }
+  .so-modal-ft { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+  .so-grid { grid-template-columns: 1fr; }
+  .so-toast { left: 16px; right: 16px; bottom: 16px; }
+}

@@ -372,7 +372,7 @@ export default function OutfitCalendar() {
                   <p className="oc-ap-date">{fmtShortDate(selectedDate)}</p>
                   <h3 className="oc-ap-title">{selEntry ? 'Edit Outfit Plan' : 'Plan Your Outfit'}</h3>
                 </div>
-                <button className="oc-ap-close" onClick={() => setPanelOpen(false)}>✕</button>
+                <button className="oc-ap-close" onClick={() => setPanelOpen(false)} aria-label="Close panel">✕</button>
               </div>
 
               {/* Past date warning */}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -347,7 +347,9 @@ export default function Register() {
                   </button>
                 </div>
               </Field>
-              <div className="rg-consent" onClick={() => set('consentGiven', !form.consentGiven)}>
+              <div className="rg-consent" onClick={() => set('consentGiven', !form.consentGiven)}
+                role="checkbox" aria-checked={form.consentGiven} tabIndex={0}
+                onKeyDown={e => e.key === 'Enter' && set('consentGiven', !form.consentGiven)}>
                 <div className={`rg-checkbox ${form.consentGiven ? 'rg-checkbox--checked' : ''}`}>
                   {form.consentGiven && '✓'}
                 </div>

@@ -538,12 +538,13 @@ export default function History() {
             <input
               ref={searchRef}
               className="hst-search"
+              aria-label="Search by name, category, outfit"
               placeholder="Search by name, category, outfit…"
               defaultValue={search}
               onChange={e => setSearch(e.target.value)}
             />
             {search && (
-              <button className="hst-search-x" onClick={() => { setSearch(''); if (searchRef.current) searchRef.current.value = ''; }}>
+              <button className="hst-search-x" aria-label="Clear search" onClick={() => { setSearch(''); if (searchRef.current) searchRef.current.value = ''; }}>
                 {Ico.close(12)}
               </button>
             )}

@@ -961,7 +961,7 @@ export default function Landing() {
               </div>
               <div className="socials">
                 {[{k:'fb',l:'Facebook',i:'f'},{k:'ig',l:'Instagram',i:'ig'},{k:'tw',l:'Twitter',i:'tw'},{k:'li',l:'LinkedIn',i:'in'}].map(s => (
-                  <a key={s.k} href="#" className="soc" aria-label={s.l}>{s.i}</a>
+                  <button key={s.k} type="button" className="soc" aria-label={s.l}>{s.i}</button>
                 ))}
               </div>
             </div>

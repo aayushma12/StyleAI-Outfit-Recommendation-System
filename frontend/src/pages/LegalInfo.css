@@ -63,3 +63,13 @@
 .lg-back:hover {
   text-decoration: underline;
 }
+
+@media (max-width: 640px) {
+  .lg-root { padding: 28px 14px; }
+  .lg-card { padding: 24px; }
+}
+
+@media (max-width: 400px) {
+  .lg-card { padding: 18px; }
+  .lg-section h2 { font-size: 1rem; }
+}

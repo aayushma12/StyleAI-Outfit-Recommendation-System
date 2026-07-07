@@ -285,7 +285,8 @@ export default function Dashboard() {
                   { label: 'Outfit Builder',  val: '',              icon: 'layers',    color: '#0EA5E9', section: 'builder' },
                   { label: 'Outfit Calendar', val: '',              icon: 'calendar',  color: '#059669', section: 'calendar' },
                 ].map(s => (
-                  <div key={s.label} className="db-stat-card" onClick={() => setActiveSection(s.section)} style={{ cursor: 'pointer' }}>
+                  <div key={s.label} className="db-stat-card" onClick={() => setActiveSection(s.section)} style={{ cursor: 'pointer' }}
+                    role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setActiveSection(s.section)}>
                     <div className="db-stat-icon" style={{ '--c': s.color }}>
                       <Icon d={Icons[s.icon]} size={20} />
                     </div>
@@ -378,7 +379,8 @@ export default function Dashboard() {
                       { step: '2', text: 'Use Outfit Builder to create combinations',   section: 'builder' },
                       { step: '3', text: 'Plan your week with Outfit Calendar',         section: 'calendar' },
                     ].map(s => (
-                      <div key={s.step} className="db-step" onClick={() => setActiveSection(s.section)}>
+                      <div key={s.step} className="db-step" onClick={() => setActiveSection(s.section)}
+                        role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setActiveSection(s.section)}>
                         <span className="db-step-num">{s.step}</span>
                         <span className="db-step-text">{s.text}</span>
                       </div>

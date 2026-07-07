@@ -231,7 +231,8 @@ export default function Login() {
 
             {/* Remember me */}
             <div className="lg-options">
-              <div className="lg-remember" onClick={() => setRemember(p => !p)}>
+              <div className="lg-remember" onClick={() => setRemember(p => !p)}
+                role="checkbox" aria-checked={remember} tabIndex={0} onKeyDown={e => e.key === 'Enter' && setRemember(p => !p)}>
                 <div className={`lg-check ${remember ? 'lg-check--on' : ''}`}>{remember && '✓'}</div>
                 <span>Remember me for 30 days</span>
               </div>

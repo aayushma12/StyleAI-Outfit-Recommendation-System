@@ -186,3 +186,10 @@
 .drm-confirm:hover {
   background: #B91C1C;
 }
+
+@media (max-width: 480px) {
+  .drm-hd { padding: 14px 14px 12px; }
+  .drm-body { padding: 12px 14px; }
+  .drm-footer { padding: 12px 14px; flex-direction: column; }
+  .drm-hd-title { font-size: 0.94rem; }
+}
