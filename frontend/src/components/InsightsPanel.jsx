@@ -145,7 +145,7 @@ function CalibrationMeter({ calibration }) {
 
 function WardrobeUtilisation({ report, onNavigate }) {
   if (!report || report.totalItems === 0) return null;
-  const { utilizationRate, underusedItems, overusedItems, suggestions } = report;
+  const { utilizationRate, underusedItems, suggestions } = report;
   const utilColor = getMeterColor(utilizationRate);
 
   return (

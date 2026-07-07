@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
-import GuestModal from '../components/GuestModal';
 
 const AuthContext = createContext(null);
 
@@ -10,8 +9,6 @@ export const AuthProvider = ({ children }) => {
   // Route guards block rendering until this resolves so there are no flashes
   // or premature redirects to /login on a valid-cookie page refresh.
   const [loading, setLoading] = useState(true);
-
-  const [guestModal, setGuestModal] = useState({ isOpen: false, message: '' });
 
   // ── Startup session restore ────────────────────────────────────────────────
   // On every page load / refresh, ask the backend whether the httpOnly cookie
@@ -72,36 +69,13 @@ export const AuthProvider = ({ children }) => {
   const isUser  = user?.role === 'user';
   const isAdmin = user?.role === 'admin';
 
-  // ── Guest modal helpers ───────────────────────────────────────────────────────
-  const showGuestModal = useCallback((message = '') => {
-    setGuestModal({ isOpen: true, message });
-  }, []);
-
-  const hideGuestModal = useCallback(() => {
-    setGuestModal({ isOpen: false, message: '' });
-  }, []);
-
-  const requireAuth = useCallback((message = '') => {
-    if (user) return true;
-    showGuestModal(message);
-    return false;
-  }, [user, showGuestModal]);
-
   return (
     <AuthContext.Provider value={{
       user, setUser, loading,
       login, register, logout, refreshUser,
       isGuest, isUser, isAdmin,
-      showGuestModal, hideGuestModal, requireAuth,
     }}>
       {children}
-
-      {/* Global guest prompt — triggered by requireAuth() from any component */}
-      <GuestModal
-        isOpen={guestModal.isOpen}
-        onClose={hideGuestModal}
-        message={guestModal.message}
-      />
     </AuthContext.Provider>
   );
 };

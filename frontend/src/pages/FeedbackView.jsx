@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import './FeedbackView.css';
 
@@ -288,8 +287,6 @@ function HistoryCard({ item }) {
 }
 
 export default function FeedbackView() {
-  const { user } = useAuth();
-
   /* Form state */
   const [type,    setType]    = useState('suggestion');
   const [subject, setSubject] = useState('');

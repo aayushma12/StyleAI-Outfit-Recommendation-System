@@ -117,7 +117,7 @@ function buildPersonaSession(persona, userId) {
   }
 
   const candidates = categories
-    .map((category, idx) => ({ category, ...simulateCandidate(persona, context) }))
+    .map((category) => ({ category, ...simulateCandidate(persona, context) }))
     .sort((a, b) => b.quality - a.quality)
     .map((c, idx) => ({
       category: c.category,
