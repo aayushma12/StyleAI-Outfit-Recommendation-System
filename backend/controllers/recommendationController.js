@@ -10,6 +10,7 @@ const { generateWardrobeUtilizationReport,
         computeCalibrationScore,
         generateStyleNarrative } = require('../services/personalizedLearningService');
 const { CATEGORY_WEIGHTS }     = require('../services/scoringService');
+const adaptiveRerank           = require('../services/adaptiveRerankService');
 const ki                       = require('../services/kathmanduIntelligence');
 const popularity               = require('../services/popularityService');
 const Recommendation           = require('../models/Recommendation');
@@ -199,6 +200,18 @@ exports.submitFeedback = async (req, res) => {
   rec.userFeedback = (feedback || '').trim().slice(0, 400);
   if (rating >= 1 && rating <= 5) rec.userRating = Math.round(rating);
   if (Array.isArray(reasons)) rec.feedbackReasons = reasons.slice(0, 10);
+
+  // Session-level adaptive re-ranking — immediately nudge the OTHER still-
+  // pending recommendations in this same session using the dislike reason,
+  // instead of only storing feedback for future model training. Bounded to
+  // this session's own pending recs + each category's small stored
+  // `alternates` pool (see adaptiveRerankService.js for the full rationale).
+  let rerankedSession = null;
+  if (['disliked', 'skipped'].includes(status) && Array.isArray(reasons) && reasons.length) {
+    const adjusted = await adaptiveRerank.reRankOnDislike(session, rec, reasons);
+    if (adjusted) rerankedSession = session.recommendations;
+  }
+
   await session.save();
 
   // Saving an AI recommendation must actually create/update the record the
@@ -275,7 +288,13 @@ exports.submitFeedback = async (req, res) => {
     metadata:   logMetadata,
   });
 
-  res.json({ updated: { category, status, rating: rec.userRating } });
+  res.json({
+    updated: { category, status, rating: rec.userRating },
+    // Only present when the dislike reason actually changed the session —
+    // lets the UI refresh the whole panel in place rather than restarting
+    // generation. Additive: existing callers that only read `updated` are unaffected.
+    ...(rerankedSession ? { session: rerankedSession } : {}),
+  });
 };
 
 // ── Insights ──────────────────────────────────────────────────────────────────

@@ -130,6 +130,57 @@ describe('diversityEngine.selectDiverse — near-tie randomization', () => {
   });
 });
 
+describe('diversityEngine.selectDiverse — epsilon-greedy exploration', () => {
+  const originalEnv = process.env.EXPLORATION_EPSILON;
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env.EXPLORATION_EPSILON;
+    else process.env.EXPLORATION_EPSILON = originalEnv;
+    jest.resetModules();
+  });
+
+  test('never selects a candidate below the quality floor, even when exploration always fires', () => {
+    process.env.EXPLORATION_EPSILON = '1'; // force exploration on every call
+    jest.resetModules();
+    const de = require('../../services/diversityEngine');
+    const ranked = {
+      best_match: [mkScored(95, ['a']), mkScored(90, ['b']), mkScored(20, ['c'])], // 20 is far below the 70% floor
+      most_stylish: [], wardrobe_champion: [],
+    };
+    for (let i = 0; i < 20; i++) {
+      const selected = de.selectDiverse(ranked, CATEGORIES, { rng: Math.random });
+      const pick = selected.find(s => s.catMeta.key === 'best_match');
+      expect(pick.scored.confidence).not.toBe(20);
+    }
+  });
+
+  test('with exploration forced on, favors the candidate least represented in recent history over the raw top scorer', () => {
+    process.env.EXPLORATION_EPSILON = '1';
+    jest.resetModules();
+    const de = require('../../services/diversityEngine');
+    const recentlyRecommendedItemIds = new Set(['a']); // the top scorer's own item was just shown
+    const ranked = {
+      best_match: [mkScored(95, ['a']), mkScored(93, ['b'])], // both within the quality floor of each other
+      most_stylish: [], wardrobe_champion: [],
+    };
+    const selected = de.selectDiverse(ranked, CATEGORIES, { rng: () => 0.5, recentlyRecommendedItemIds });
+    const pick = selected.find(s => s.catMeta.key === 'best_match');
+    expect(pick.scored.candidate.sourceItemIds).toEqual(['b']); // the fresher one, not the recently-shown top scorer
+  });
+
+  test('with exploration forced off (epsilon=0), behaves identically to the pre-exploration selection logic', () => {
+    process.env.EXPLORATION_EPSILON = '0';
+    jest.resetModules();
+    const de = require('../../services/diversityEngine');
+    const ranked = {
+      best_match: [mkScored(95, ['a']), mkScored(94, ['b']), mkScored(93, ['c']), mkScored(60, ['d'])],
+      most_stylish: [], wardrobe_champion: [],
+    };
+    const selected = de.selectDiverse(ranked, CATEGORIES, { rng: () => 0.01 });
+    const pick = selected.find(s => s.catMeta.key === 'best_match');
+    expect(pick.scored.confidence).toBe(95); // same result as the existing near-tie weighted-pick test for this rng value
+  });
+});
+
 describe('diversityEngine.selectDiverse — cross-session fingerprint freshness', () => {
   test('excludes a candidate whose fingerprint was recently served, when a fresh alternative exists', () => {
     const shirtSlots  = { top: { name: 'Shirt' } };

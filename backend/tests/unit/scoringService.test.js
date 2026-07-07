@@ -143,4 +143,69 @@ describe('scoringService.CATEGORY_WEIGHTS', () => {
       expect(sum).toBeCloseTo(1.0, 1);
     }
   });
+
+  test('only the 3 wizard categories carry the 5 new wizard-only dimensions', () => {
+    const wizardOnlyKeys = ['dresscodeFit', 'indoorOutdoorFit', 'dayNightFit', 'vibeMatch', 'budgetFit'];
+    for (const [category, weights] of Object.entries(scoring.CATEGORY_WEIGHTS)) {
+      const hasWizardKeys = wizardOnlyKeys.some(k => k in weights);
+      expect(hasWizardKeys).toBe(category.startsWith('wizard_option_'));
+    }
+  });
+});
+
+describe('scoringService.computeSubScores — wizard-only dimensions', () => {
+  const formalOutfit = [
+    { name: 'Blazer', category: 'jackets', color: 'black', occasion: 'office', formalityLevel: 4, colorHex: ['#111111'] },
+    { name: 'Trousers', category: 'bottoms', color: 'black', occasion: 'office', formalityLevel: 4, colorHex: ['#111111'] },
+  ];
+  test('absent when no wizard fields are supplied — non-wizard sessions get exactly the original 9 keys', () => {
+    const scores = scoring.computeSubScores(sampleOutfitItems, {}, sampleUser, sampleContext, sampleInsights, {});
+    expect(Object.keys(scores).sort()).toEqual(SCORE_KEYS.sort());
+  });
+
+  test('dresscodeFit rewards a formal outfit for a formal dresscode and penalizes it for a casual one', () => {
+    const formalCtx = { ...sampleContext, dresscode: 'formal office attire' };
+    const casualCtx = { ...sampleContext, dresscode: 'casual weekend' };
+    const forFormalDress = scoring.computeSubScores(formalOutfit, {}, sampleUser, formalCtx, sampleInsights, {});
+    const forCasualDress = scoring.computeSubScores(formalOutfit, {}, sampleUser, casualCtx, sampleInsights, {});
+    expect(forFormalDress.dresscodeFit).toBeGreaterThan(forCasualDress.dresscodeFit);
+  });
+
+  test('dresscodeFit is absent (not neutral-guessed) when the free text has no recognizable keyword', () => {
+    const ctx = { ...sampleContext, dresscode: 'asdkjasnd nonsense text' };
+    const scores = scoring.computeSubScores(formalOutfit, {}, sampleUser, ctx, sampleInsights, {});
+    expect(scores.dresscodeFit).toBeUndefined();
+  });
+
+  test('vibeMatch scores higher for a vibe whose mapped styles match the outfit', () => {
+    const elegantCtx = { ...sampleContext, vibe: 'Elegant' };
+    const sportyCtx  = { ...sampleContext, vibe: 'Sporty' };
+    const forElegant = scoring.computeSubScores(formalOutfit, {}, sampleUser, elegantCtx, sampleInsights, {});
+    const forSporty  = scoring.computeSubScores(formalOutfit, {}, sampleUser, sportyCtx, sampleInsights, {});
+    expect(forElegant.vibeMatch).toBeGreaterThan(forSporty.vibeMatch);
+  });
+
+  test('dayNightFit rewards brighter outfits for day and deeper-toned outfits for night', () => {
+    const brightOutfit = [{ name: 'White Top', category: 'tops', color: 'white', colorHex: ['#ffffff'] }];
+    const dayScore   = scoring.computeSubScores(brightOutfit, {}, sampleUser, { ...sampleContext, dayNight: 'day' },   sampleInsights, {});
+    const nightScore = scoring.computeSubScores(brightOutfit, {}, sampleUser, { ...sampleContext, dayNight: 'night' }, sampleInsights, {});
+    expect(dayScore.dayNightFit).toBeGreaterThan(nightScore.dayNightFit);
+  });
+
+  test('dayNightFit/indoorOutdoorFit/dresscodeFit are absent when the value is "both"/unset (no forced guess)', () => {
+    const scores = scoring.computeSubScores(sampleOutfitItems, {}, sampleUser,
+      { ...sampleContext, dayNight: 'both', indoorOutdoor: 'both' }, sampleInsights, {});
+    expect(scores.dayNightFit).toBeUndefined();
+    expect(scores.indoorOutdoorFit).toBeUndefined();
+  });
+
+  test('budgetFit rewards owned-heavy outfits more for a "budget" tier than a "luxury" tier', () => {
+    const mostlySuggestedSlots = {
+      top: { name: 'Owned Top', item: 'x' }, bottom: { suggestion: 'suggested bottoms' },
+      footwear: { suggestion: 'suggested shoes' }, jewelry: { suggestion: 'suggested jewelry' },
+    };
+    const budgetScores  = scoring.computeSubScores(sampleOutfitItems, mostlySuggestedSlots, sampleUser, { ...sampleContext, budget: 'budget' },  sampleInsights, {});
+    const luxuryScores  = scoring.computeSubScores(sampleOutfitItems, mostlySuggestedSlots, sampleUser, { ...sampleContext, budget: 'luxury' }, sampleInsights, {});
+    expect(budgetScores.budgetFit).toBeLessThan(luxuryScores.budgetFit);
+  });
 });

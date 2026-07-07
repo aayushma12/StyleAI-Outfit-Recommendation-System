@@ -1,53 +1,7 @@
 'use strict';
 
 const rules = require('./fashionRulesEngine');
-
-// ── Category scoring weights ──────────────────────────────────────────────────
-// 9 dimensions (trendScore added as 9th). Weights sum to 1.0 per category.
-// Single source of truth — served to frontend via GET /recommendations/weights.
-const CATEGORY_WEIGHTS = {
-  best_match: {
-    styleMatch:    0.18, colorHarmony:  0.12, colorPref:     0.12,
-    occasionFit:   0.16, weatherFit:    0.12, behaviorSignal:0.09,
-    bodyTypeMatch: 0.08, fabricMatch:   0.07, trendScore:    0.06,
-  },
-  most_stylish: {
-    styleMatch:    0.22, colorHarmony:  0.22, colorPref:     0.19,
-    occasionFit:   0.08, weatherFit:    0.00, behaviorSignal:0.05,
-    bodyTypeMatch: 0.07, fabricMatch:   0.06, trendScore:    0.11,
-  },
-  most_comfortable: {
-    styleMatch:    0.07, colorHarmony:  0.04, colorPref:     0.11,
-    occasionFit:   0.07, weatherFit:    0.30, behaviorSignal:0.20,
-    bodyTypeMatch: 0.09, fabricMatch:   0.10, trendScore:    0.02,
-  },
-  weather_optimized: {
-    styleMatch:    0.07, colorHarmony:  0.03, colorPref:     0.07,
-    occasionFit:   0.16, weatherFit:    0.44, behaviorSignal:0.05,
-    bodyTypeMatch: 0.04, fabricMatch:   0.09, trendScore:    0.05,
-  },
-  wardrobe_champion: {
-    styleMatch:    0.18, colorHarmony:  0.15, colorPref:     0.15,
-    occasionFit:   0.16, weatherFit:    0.08, behaviorSignal:0.05,
-    bodyTypeMatch: 0.09, fabricMatch:   0.08, trendScore:    0.06,
-  },
-  // Wizard categories — match-optimised
-  wizard_option_1: {
-    styleMatch:    0.20, colorHarmony:  0.14, colorPref:     0.13,
-    occasionFit:   0.18, weatherFit:    0.10, behaviorSignal:0.08,
-    bodyTypeMatch: 0.08, fabricMatch:   0.07, trendScore:    0.02,
-  },
-  wizard_option_2: {
-    styleMatch:    0.21, colorHarmony:  0.19, colorPref:     0.14,
-    occasionFit:   0.14, weatherFit:    0.06, behaviorSignal:0.07,
-    bodyTypeMatch: 0.07, fabricMatch:   0.06, trendScore:    0.06,
-  },
-  wizard_option_3: {
-    styleMatch:    0.22, colorHarmony:  0.14, colorPref:     0.13,
-    occasionFit:   0.16, weatherFit:    0.08, behaviorSignal:0.09,
-    bodyTypeMatch: 0.08, fabricMatch:   0.07, trendScore:    0.03,
-  },
-};
+const { CATEGORY_WEIGHTS } = require('../config/scoringWeights');
 
 const RECOMMENDATION_CATEGORIES = [
   {
@@ -89,6 +43,10 @@ const RECOMMENDATION_CATEGORIES = [
 
 exports.RECOMMENDATION_CATEGORIES = RECOMMENDATION_CATEGORIES;
 exports.CATEGORY_WEIGHTS = CATEGORY_WEIGHTS;
+// Exported so other services (e.g. adaptiveRerankService) reuse the exact
+// same style-inference/formality-averaging logic rather than duplicating it.
+exports.inferItemStyles = inferItemStyles;
+exports.avgFormality = avgFormality;
 
 function extractColors(item) {
   if (!item.color) return [];
@@ -288,6 +246,119 @@ function calcFabricScore(outfitItems, userProfile) {
   return rules.fabricPreferenceScore(outfitItems, userProfile.fabricPreferences);
 }
 
+// ── Wizard-only dimensions ───────────────────────────────────────────────────
+// These 5 dimensions only carry real weight in the wizard_option_* categories
+// (see config/scoringWeights.js) — every other category's weight vector never
+// references these keys at all, so they're never summed in for the standard
+// dashboard flow regardless of whether they were computed. Each function
+// returns null (not a number) when its corresponding wizard field is unset,
+// so finalizeScore's existing `?? 0.5` neutral fallback applies rather than
+// guessing at a value with no real signal behind it.
+
+const FORMALITY_KEYWORDS = [
+  { re: /black[\s-]?tie|black tie|gala|ball/i,                    formality: 4 },
+  { re: /formal|office|business|corporate|interview/i,             formality: 3 },
+  { re: /smart[\s-]?casual|semi[\s-]?formal|date night|dinner/i,   formality: 2 },
+  { re: /casual|relaxed|weekend|everyday|daily/i,                  formality: 1 },
+  { re: /loungewear|home|comfy|lazy/i,                              formality: 0 },
+];
+
+function avgFormality(outfitItems) {
+  const levels = outfitItems.map(it => it.formalityLevel).filter(l => Number.isInteger(l));
+  if (!levels.length) return null;
+  return levels.reduce((a, b) => a + b, 0) / levels.length;
+}
+
+// dresscode is free text (up to 100 chars) from the wizard, not an enum —
+// keyword-matched against a small formality dictionary rather than assumed.
+function computeDresscodeFit(outfitItems, dresscode) {
+  if (!dresscode || !dresscode.trim()) return null;
+  const match = FORMALITY_KEYWORDS.find(k => k.re.test(dresscode));
+  if (!match) return null; // no recognizable keyword — genuinely no signal, not a guess
+  const actual = avgFormality(outfitItems);
+  if (actual === null) return null; // no wardrobe item in this outfit has formalityLevel set
+  return Math.max(0, 1 - Math.abs(actual - match.formality) / 4);
+}
+
+function computeIndoorOutdoorFit(outfitSlots, indoorOutdoor, weather) {
+  if (!indoorOutdoor || indoorOutdoor === 'both') return null;
+  const layering = rules.getWeatherLayeringAdvice(weather?.temp);
+  if (indoorOutdoor === 'outdoor') {
+    // Outdoor exposure — reward outfits that actually followed the weather's
+    // layering call (outerwear present when the weather required/recommended it).
+    if (layering.requireOuterwear || layering.recommendOuterwear) {
+      const outer = outfitSlots?.outerwear;
+      return (outer?.item || outer?.suggestion) ? 0.85 : 0.45;
+    }
+    return 0.75;
+  }
+  return 0.70; // indoor — weather/layering matters less; mild neutral-positive
+}
+
+function hexToBrightness(hex) {
+  if (typeof hex !== 'string') return null;
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const r = parseInt(m[1].slice(0, 2), 16), g = parseInt(m[1].slice(2, 4), 16), b = parseInt(m[1].slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255; // 0 (black) .. 1 (white)
+}
+
+function computeDayNightFit(outfitItems, dayNight) {
+  if (!dayNight || dayNight === 'both') return null;
+  const brightness = outfitItems
+    .flatMap(it => Array.isArray(it.colorHex) ? it.colorHex : [])
+    .map(hexToBrightness)
+    .filter(b => b !== null);
+  const itemStyles = outfitItems.flatMap(inferItemStyles);
+  const hasEveningStyle = itemStyles.some(s => ['classic', 'romantic', 'edgy'].includes(s));
+
+  if (!brightness.length) return dayNight === 'night' && hasEveningStyle ? 0.7 : 0.6; // no color data — mild neutral
+
+  const avgBrightness = brightness.reduce((a, b) => a + b, 0) / brightness.length;
+  if (dayNight === 'day') return Math.max(0.3, avgBrightness);
+  return Math.max(0.3, (1 - avgBrightness) * 0.7 + (hasEveningStyle ? 0.3 : 0)); // night
+}
+
+const VIBE_STYLE_MAP = {
+  elegant:  ['classic', 'formal'],
+  bold:     ['edgy', 'y2k'],
+  minimal:  ['minimalist'],
+  bohemian: ['boho', 'romantic'],
+  street:   ['streetwear', 'korean', 'y2k'],
+  classic:  ['classic', 'formal'],
+  romantic: ['romantic', 'boho'],
+  power:    ['formal', 'classic'],
+  playful:  ['y2k', 'korean'],
+  edgy:     ['edgy', 'streetwear'],
+  cozy:     ['casual', 'korean'],
+  sporty:   ['athleisure', 'sporty'],
+};
+
+function computeVibeMatch(outfitItems, vibe) {
+  if (!vibe) return null;
+  const targetStyles = VIBE_STYLE_MAP[vibe.toLowerCase()];
+  if (!targetStyles) return null;
+  const itemStyles = outfitItems.flatMap(inferItemStyles);
+  if (!itemStyles.length) return 0.5;
+  const hits = itemStyles.filter(s => targetStyles.includes(s)).length;
+  return Math.min(1, 0.4 + (hits / itemStyles.length) * 0.9);
+}
+
+// Budget is a proxy, not a real price signal — WardrobeItem has no price
+// field (a user's own items are free to re-wear regardless of budget tier).
+// Lower budget tiers reward outfits built mostly from owned items; higher
+// tiers are tolerant of (even expect) more aspirational/suggested slots.
+const BUDGET_OWNED_PREFERENCE = { budget: 0.9, 'mid-range': 0.6, premium: 0.35, luxury: 0.15 };
+
+function computeBudgetFit(outfitSlots, budget) {
+  const preferOwned = BUDGET_OWNED_PREFERENCE[budget];
+  if (preferOwned === undefined) return null;
+  const slots = Object.values(outfitSlots || {}).filter(s => s.name || s.suggestion);
+  if (!slots.length) return 0.5;
+  const ownedRatio = slots.filter(s => s.item).length / slots.length;
+  return preferOwned * ownedRatio + (1 - preferOwned) * (1 - ownedRatio);
+}
+
 // ── Sub-score computation (category-independent) ────────────────────────────
 // Computes the 9 raw 0-1 dimensions for one outfit candidate. Called ONCE per
 // candidate by rankingService, before any category weighting or ML blending —
@@ -295,7 +366,7 @@ function calcFabricScore(outfitItems, userProfile) {
 exports.computeSubScores = function computeSubScores(outfitItems, outfitSlots, userProfile, context, insights, signals = {}) {
   const negativeSignals = signals.negativeSignals || {};
 
-  return {
+  const scores = {
     styleMatch:     calcStyleMatchScore(outfitItems, userProfile),
     colorHarmony:   calcColorHarmonyScore(outfitItems),
     colorPref:      calcColorPreferenceScore(outfitItems, userProfile),
@@ -306,6 +377,24 @@ exports.computeSubScores = function computeSubScores(outfitItems, outfitSlots, u
     fabricMatch:    calcFabricScore(outfitItems, userProfile),
     trendScore:     calcTrendScore(outfitItems, insights, signals.kathmanduContext || {}),
   };
+
+  // Wizard-only — only present in `context` for wizard sessions (see
+  // rankingService.rankForCategories's optional 5th argument). Omitted
+  // entirely (not set to a default) when there's no real signal, so
+  // finalizeScore's `?? 0.5` neutral fallback is what actually applies.
+  const dresscodeFit     = computeDresscodeFit(outfitItems, context.dresscode);
+  const indoorOutdoorFit = computeIndoorOutdoorFit(outfitSlots, context.indoorOutdoor, context.weather);
+  const dayNightFit      = computeDayNightFit(outfitItems, context.dayNight);
+  const vibeMatch        = computeVibeMatch(outfitItems, context.vibe);
+  const budgetFit        = computeBudgetFit(outfitSlots, context.budget);
+
+  if (dresscodeFit     !== null) scores.dresscodeFit     = dresscodeFit;
+  if (indoorOutdoorFit !== null) scores.indoorOutdoorFit = indoorOutdoorFit;
+  if (dayNightFit      !== null) scores.dayNightFit      = dayNightFit;
+  if (vibeMatch        !== null) scores.vibeMatch        = vibeMatch;
+  if (budgetFit        !== null) scores.budgetFit        = budgetFit;
+
+  return scores;
 };
 
 // ── Category-weighted finalization ───────────────────────────────────────────
@@ -325,6 +414,10 @@ exports.finalizeScore = function finalizeScore(scores, category = 'best_match', 
     : weighted;
 
   const confidence = Math.round(Math.max(10, Math.min(99, finalScore * 100)));
+  // Standalone rule-based score (0-1), before any ML blend — persisted
+  // separately (Recommendation.ruleScore) so a real hybrid-vs-rule-only
+  // comparison can be run retrospectively without recomputing anything.
+  const ruleScore = Math.max(0, Math.min(1, weighted));
 
   const breakdown = {
     'Style Match':      Math.round(scores.styleMatch     * 100),
@@ -337,8 +430,16 @@ exports.finalizeScore = function finalizeScore(scores, category = 'best_match', 
     'Fabric Match':     Math.round(scores.fabricMatch    * 100),
     'Trend Score':      Math.round(scores.trendScore     * 100),
   };
+  // Wizard-only dimensions — only added to the breakdown when they were
+  // actually computed (i.e. a wizard session supplied real signal for them),
+  // so the standard 9-dimension XAI panel radar chart is completely unaffected.
+  if (scores.dresscodeFit     !== undefined) breakdown['Dresscode Fit']      = Math.round(scores.dresscodeFit     * 100);
+  if (scores.indoorOutdoorFit !== undefined) breakdown['Indoor/Outdoor Fit'] = Math.round(scores.indoorOutdoorFit * 100);
+  if (scores.dayNightFit      !== undefined) breakdown['Day/Night Fit']     = Math.round(scores.dayNightFit      * 100);
+  if (scores.vibeMatch        !== undefined) breakdown['Vibe Match']        = Math.round(scores.vibeMatch        * 100);
+  if (scores.budgetFit        !== undefined) breakdown['Budget Fit']        = Math.round(scores.budgetFit        * 100);
 
-  return { confidence, breakdown };
+  return { confidence, breakdown, ruleScore };
 };
 
 exports.generateScoreNarrative = function(scores, category, context) {

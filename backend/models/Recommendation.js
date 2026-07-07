@@ -22,6 +22,14 @@ const scoreBreakdownSchema = new mongoose.Schema({
   bodyTypeMatch:   { type: Number, default: 70 },
   fabricMatch:     { type: Number, default: 70 },
   trendScore:      { type: Number, default: 55 },
+  // Wizard-only dimensions — null for every standard (non-wizard) session,
+  // populated only when the recommendation wizard supplied real signal for
+  // the corresponding field (see scoringService.js's computeSubScores).
+  dresscodeFit:     { type: Number, default: null },
+  indoorOutdoorFit: { type: Number, default: null },
+  dayNightFit:      { type: Number, default: null },
+  vibeMatch:        { type: Number, default: null },
+  budgetFit:        { type: Number, default: null },
 }, { _id: false });
 
 // ── Per-recommendation item ───────────────────────────────────────────────────
@@ -86,6 +94,22 @@ const rankedRecommendationSchema = new mongoose.Schema({
   mlAcceptanceProbability: { type: Number, default: null, min: 0, max: 1 },
   explanationSource: { type: String, enum: ['template', 'llm_polished'], default: 'template' },
   generationMethod:  { type: String, enum: ['deterministic_v2', 'legacy_llm_v1'], default: 'deterministic_v2' },
+
+  // Standalone rule-based score (0-1), before any ML acceptance-probability
+  // blend — see scoringService.finalizeScore. Closes the one real gap in an
+  // otherwise-already-complete recommendation log (user, timestamp, wizard
+  // params, weather, candidate count, ML probability, final score, feedback
+  // reason were all already persisted).
+  ruleScore: { type: Number, default: null, min: 0, max: 1 },
+
+  // Bounded runner-up pool (top 2, computed once at generation time from
+  // candidates rankingService already scored — never regenerated) used for
+  // same-session adaptive re-ranking when this category's shown pick gets
+  // disliked. See recommendationController.submitFeedback. Mixed because an
+  // alternate mirrors a subset of this same schema's shape (confidence,
+  // scores, outfitName, outfit, explanation) but isn't itself a full ranked
+  // recommendation (no status/feedback of its own until promoted).
+  alternates: [{ type: mongoose.Schema.Types.Mixed }],
 }, { _id: true, timestamps: false });
 
 // ── Recommendation session ────────────────────────────────────────────────────

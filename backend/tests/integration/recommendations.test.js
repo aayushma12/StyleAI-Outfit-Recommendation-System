@@ -133,3 +133,113 @@ describe('POST /api/recommendations/daily/regenerate', () => {
     expect(String(second.body.session._id)).toBe(String(regenerated.body.session._id));
   }, 60000);
 });
+
+describe('POST /api/recommendations/:id/feedback — session-level adaptive re-ranking', () => {
+  test('disliking a rec with "wrong_color" boosts a differently-colored pending rec over a same-colored one', async () => {
+    const { token, userId } = await registerAndGetToken(`rerank-test-${Date.now()}-${Math.random()}@example.com`);
+
+    const redTop = await mkWardrobeItem(userId, { name: 'Red Top', color: 'red', colorHex: ['#cc2222'] });
+    const blueTop = await mkWardrobeItem(userId, { name: 'Blue Top', color: 'blue', colorHex: ['#2222cc'] });
+
+    const session = await Recommendation.create({
+      user: userId,
+      context: { occasion: 'daily', season: 'spring', weather: { temp: 22, condition: 'Clear' } },
+      recommendations: [
+        {
+          category: 'best_match', categoryLabel: 'Best Match', confidence: 80,
+          outfitName: 'Red Look', outfit: { top: { item: redTop._id, name: 'Red Top' } },
+          explanation: { summary: 'Red outfit.' }, status: 'pending',
+        },
+        {
+          category: 'most_stylish', categoryLabel: 'Most Stylish', confidence: 70,
+          outfitName: 'Also Red Look', outfit: { top: { item: redTop._id, name: 'Red Top' } },
+          explanation: { summary: 'Also red.' }, status: 'pending',
+        },
+        {
+          category: 'weather_optimized', categoryLabel: 'Weather Smart', confidence: 70,
+          outfitName: 'Blue Look', outfit: { top: { item: blueTop._id, name: 'Blue Top' } },
+          explanation: { summary: 'Blue outfit.' }, status: 'pending',
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .post(`/api/recommendations/${session._id}/feedback`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ category: 'best_match', status: 'disliked', reasons: ['wrong_color'] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.session).toBeDefined();
+
+    const stylish = res.body.session.find(r => r.category === 'most_stylish'); // shares red with the disliked rec
+    const weather = res.body.session.find(r => r.category === 'weather_optimized'); // blue — not penalized
+    expect(weather.confidence).toBeGreaterThan(stylish.confidence);
+  });
+
+  test('a dislike with no reasons does not include a session in the response (unchanged behavior)', async () => {
+    const { token, userId } = await registerAndGetToken(`rerank-noreasons-${Date.now()}-${Math.random()}@example.com`);
+    const item = await mkWardrobeItem(userId);
+    const session = await mkSession(userId, { topItemId: item._id });
+
+    const res = await request(app)
+      .post(`/api/recommendations/${session._id}/feedback`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ category: 'best_match', status: 'disliked' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.session).toBeUndefined();
+    expect(res.body.updated).toEqual({ category: 'best_match', status: 'disliked', rating: null });
+  });
+});
+
+describe('POST /api/recommendations/wizard — wizard-only scoring dimensions', () => {
+  test('two sessions with identical wardrobe/occasion but different dresscode/vibe/budget produce different confidence', async () => {
+    const { token, userId } = await registerAndGetToken(`wizard-test-${Date.now()}-${Math.random()}@example.com`);
+
+    await WardrobeItem.insertMany([
+      { user: userId, name: 'Blazer', category: 'jackets', color: 'black', colorHex: ['#111111'], occasion: 'office', formalityLevel: 4 },
+      { user: userId, name: 'Trousers', category: 'bottoms', color: 'black', colorHex: ['#111111'], occasion: 'office', formalityLevel: 4 },
+      { user: userId, name: 'Oxford Shoes', category: 'footwear', color: 'black', colorHex: ['#111111'], occasion: 'office', formalityLevel: 4 },
+      { user: userId, name: 'Gold Cufflinks', category: 'accessories', subcategory: 'jewelry', color: 'gold' },
+    ]);
+
+    const formal = await request(app).post('/api/recommendations/wizard')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ occasion: 'office', dresscode: 'formal office attire', budget: 'luxury', indoorOutdoor: 'indoor', dayNight: 'day', vibe: 'Elegant' });
+    const casual = await request(app).post('/api/recommendations/wizard')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ occasion: 'office', dresscode: 'casual weekend', budget: 'budget', indoorOutdoor: 'outdoor', dayNight: 'night', vibe: 'Sporty' });
+
+    expect(formal.status).toBe(200);
+    expect(casual.status).toBe(200);
+
+    const formalConfidence = formal.body.session.recommendations[0].confidence;
+    const casualConfidence = casual.body.session.recommendations[0].confidence;
+    expect(formalConfidence).not.toBe(casualConfidence);
+
+    // The persisted scores breakdown should carry the wizard-only dimensions.
+    const scores = formal.body.session.recommendations[0].scores;
+    expect(scores).toHaveProperty('dresscodeFit');
+    expect(scores).toHaveProperty('vibeMatch');
+    expect(scores).toHaveProperty('budgetFit');
+  });
+
+  test('a standard (non-wizard) session never carries the wizard-only score keys', async () => {
+    const { token, userId } = await registerAndGetToken(`wizard-standard-${Date.now()}-${Math.random()}@example.com`);
+    await mkWardrobeItem(userId, { name: 'Daily Top', category: 'tops', occasion: 'daily' });
+    await mkWardrobeItem(userId, { name: 'Daily Bottom', category: 'bottoms', occasion: 'daily' });
+
+    const res = await request(app).post('/api/recommendations/generate')
+      .set('Authorization', `Bearer ${token}`).send({ occasion: 'daily' });
+
+    expect(res.status).toBe(200);
+    const scores = res.body.session.recommendations[0].scores;
+    // The schema declares these fields with `default: null` (so the shape is
+    // consistent across all sessions once persisted) — a standard session
+    // never has real signal for them, so they round-trip as null, not a
+    // computed value.
+    expect(scores.dresscodeFit).toBeNull();
+    expect(scores.vibeMatch).toBeNull();
+    expect(scores.budgetFit).toBeNull();
+  });
+});

@@ -50,7 +50,31 @@ function buildTips(context) {
   return tips.slice(0, 3);
 }
 
-function buildRankedFromScored(catMeta, scored, rank, explanation, explanationSource, context) {
+// Shared by buildRankedFromScored (the shown pick) and buildAlternate (stored
+// runner-ups) — kept in one place rather than duplicated across both.
+function scoresFromBreakdown(breakdown) {
+  const scores = {
+    styleMatch:      breakdown['Style Match'],
+    colorHarmony:    breakdown['Color Harmony'],
+    colorPreference: breakdown['Color Preference'],
+    occasionFit:     breakdown['Occasion Fit'],
+    weatherFit:      breakdown['Weather Fit'],
+    behaviorSignal:  breakdown['Behavior Match'],
+    bodyTypeMatch:   breakdown['Body Type Match'],
+    fabricMatch:     breakdown['Fabric Match'],
+    trendScore:      breakdown['Trend Score'],
+  };
+  // Wizard-only — only present in breakdown for wizard sessions where the
+  // corresponding field carried real signal (see scoringService.js).
+  if (breakdown['Dresscode Fit']      !== undefined) scores.dresscodeFit     = breakdown['Dresscode Fit'];
+  if (breakdown['Indoor/Outdoor Fit'] !== undefined) scores.indoorOutdoorFit = breakdown['Indoor/Outdoor Fit'];
+  if (breakdown['Day/Night Fit']      !== undefined) scores.dayNightFit      = breakdown['Day/Night Fit'];
+  if (breakdown['Vibe Match']         !== undefined) scores.vibeMatch        = breakdown['Vibe Match'];
+  if (breakdown['Budget Fit']         !== undefined) scores.budgetFit        = breakdown['Budget Fit'];
+  return scores;
+}
+
+function buildRankedFromScored(catMeta, scored, rank, explanation, explanationSource, context, alternates = []) {
   const outfit = {};
   ALL_OUTFIT_SLOTS.forEach(slot => { outfit[slot] = scored.candidate.slots[slot] || emptySlotShape(); });
 
@@ -61,17 +85,8 @@ function buildRankedFromScored(catMeta, scored, rank, explanation, explanationSo
     categoryBrief: catMeta.brief,
     rank,
     confidence: scored.confidence,
-    scores: {
-      styleMatch:      scored.breakdown['Style Match'],
-      colorHarmony:    scored.breakdown['Color Harmony'],
-      colorPreference: scored.breakdown['Color Preference'],
-      occasionFit:     scored.breakdown['Occasion Fit'],
-      weatherFit:      scored.breakdown['Weather Fit'],
-      behaviorSignal:  scored.breakdown['Behavior Match'],
-      bodyTypeMatch:   scored.breakdown['Body Type Match'],
-      fabricMatch:     scored.breakdown['Fabric Match'],
-      trendScore:      scored.breakdown['Trend Score'],
-    },
+    ruleScore: scored.ruleScore ?? null,
+    scores: scoresFromBreakdown(scored.breakdown),
     outfitName: buildOutfitName(catMeta, scored.outfitItems),
     outfit,
     stylingNotes: { colorCombination: '', layeringAdvice: '', hairstyleSuggestion: '', makeupNote: '', overallLook: '' },
@@ -85,10 +100,44 @@ function buildRankedFromScored(catMeta, scored, rank, explanation, explanationSo
     mlAcceptanceProbability: scored.mlAcceptanceProbability,
     explanationSource,
     generationMethod: 'deterministic_v2',
+    // Bounded runner-up pool (top 2, computed once here — never regenerated)
+    // that submitFeedback can swap in when this category's shown pick gets
+    // disliked. See recommendationController.submitFeedback.
+    alternates,
   };
 }
 
-async function runPipeline(user, options, categories, candidateOverrides = {}) {
+// Builds the small "runner-up" pool used for same-session adaptive
+// re-ranking (Recommendation.rankedRecommendationSchema.alternates). Reuses
+// the exact candidates rankingService already scored — no regeneration, no
+// extra ML/candidate-generation cost. Capped at 2 per category.
+const MAX_ALTERNATES_PER_CATEGORY = 2;
+
+function buildAlternates(rankedPerCategory, selected, user, context) {
+  const byCategory = {};
+  for (const { catMeta, scored } of selected) {
+    const pool = rankedPerCategory[catMeta.key] || [];
+    const selectedFingerprint = scoring.fingerprintOutfit(scored.candidate.slots);
+    const runnerUps = pool
+      .filter(p => scoring.fingerprintOutfit(p.candidate.slots) !== selectedFingerprint)
+      .slice(0, MAX_ALTERNATES_PER_CATEGORY);
+
+    byCategory[catMeta.key] = runnerUps.map(p => {
+      const outfit = {};
+      ALL_OUTFIT_SLOTS.forEach(slot => { outfit[slot] = p.candidate.slots[slot] || emptySlotShape(); });
+      return {
+        confidence: p.confidence,
+        scores: scoresFromBreakdown(p.breakdown),
+        outfitName: buildOutfitName(catMeta, p.outfitItems),
+        outfit,
+        explanation: explanationService.buildTemplateExplanation(p, catMeta.key, user, context),
+      };
+    });
+  }
+  return byCategory;
+}
+
+async function runPipeline(user, options, categories, candidateOverrides = {}, wizardParams = {}) {
   const context = await contextEngine.buildContext(user, options);
 
   const candidates = candidateGenerationService.generateCandidates(user, context.wardrobeItems, {
@@ -100,13 +149,14 @@ async function runPipeline(user, options, categories, candidateOverrides = {}) {
     ...candidateOverrides,
   });
 
-  const ranked    = await rankingService.rankForCategories(candidates, user, context, categories);
-  const selected  = diversityEngine.selectDiverse(ranked, categories, context);
-  const explained = await explanationService.explainSession(selected, user, context);
-  const recs      = explained.map(({ catMeta, scored, rank, explanation, explanationSource }) =>
-    buildRankedFromScored(catMeta, scored, rank, explanation, explanationSource, context)
+  const ranked      = await rankingService.rankForCategories(candidates, user, context, categories, wizardParams);
+  const selected    = diversityEngine.selectDiverse(ranked, categories, context);
+  const alternates  = buildAlternates(ranked, selected, user, context);
+  const explained   = await explanationService.explainSession(selected, user, context);
+  const recs        = explained.map(({ catMeta, scored, rank, explanation, explanationSource }) =>
+    buildRankedFromScored(catMeta, scored, rank, explanation, explanationSource, context, alternates[catMeta.key] || [])
   );
-  const deduped   = scoring.deduplicateRecommendations(recs);
+  const deduped     = scoring.deduplicateRecommendations(recs);
 
   return { context, candidates, deduped };
 }
@@ -202,7 +252,8 @@ exports.generateWizardSession = async (user, wizardParams = {}) => {
   };
 
   const { context, candidates, deduped } = await runPipeline(
-    user, { occasion, requestedBy: 'wizard', allowSuggestions: true }, WIZARD_CATEGORIES, candidateOverrides
+    user, { occasion, requestedBy: 'wizard', allowSuggestions: true }, WIZARD_CATEGORIES, candidateOverrides,
+    { dresscode, budget, indoorOutdoor, dayNight, vibe }
   );
 
   const session = await Recommendation.create({

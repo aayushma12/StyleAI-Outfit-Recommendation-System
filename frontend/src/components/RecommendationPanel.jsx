@@ -131,7 +131,7 @@ function RecCard({ rec, sessionId, onFeedbackSent, weatherContext, weights }) {
     if (loading) return;
     setLoading(newStatus || 'rating');
     try {
-      await api.post(`/recommendations/${sessionId}/feedback`, {
+      const { data } = await api.post(`/recommendations/${sessionId}/feedback`, {
         category: rec.category,
         status:   newStatus || status,
         rating:   newRating || rating,
@@ -139,7 +139,11 @@ function RecCard({ rec, sessionId, onFeedbackSent, weatherContext, weights }) {
       });
       if (newStatus) setStatus(newStatus);
       if (newRating) setRating(newRating);
-      onFeedbackSent?.(rec.category, newStatus || status);
+      // `data.session` is only present when a dislike reason actually triggered
+      // same-session adaptive re-ranking (see recommendationController.submitFeedback) —
+      // pass the whole refreshed array up so other cards' confidence/rank
+      // update immediately instead of only this one card's status.
+      onFeedbackSent?.(rec.category, newStatus || status, data.session);
     } catch (err) {
       console.error('Feedback error:', err);
     } finally {
@@ -441,16 +445,12 @@ export default function RecommendationPanel() {
   const [activeTab,  setActiveTab]  = useState(0);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState('');
-  const [wxContext,  setWxContext]   = useState(null);
   const [showWizard, setShowWizard] = useState(false);
   const [weights,    setWeights]    = useState(null);
 
   useEffect(() => {
     api.get('/recommendations/latest')
       .then(r => { if (r.data.session) setSession(r.data.session); })
-      .catch(() => {});
-    api.get('/recommendations/kathmandu')
-      .then(r => setWxContext(r.data))
       .catch(() => {});
     api.get('/recommendations/weights')
       .then(r => setWeights(r.data.weights))
@@ -562,15 +562,20 @@ export default function RecommendationPanel() {
 
           {activeRec && (
             <RecCard
-              key={activeRec.category}
+              key={`${activeRec.category}-${activeRec.outfitName}-${activeRec.status}`}
               rec={activeRec}
               sessionId={session._id}
               weatherContext={session.context?.weather}
               weights={weights}
-              onFeedbackSent={(category, newStatus) => {
+              onFeedbackSent={(category, newStatus, updatedRecommendations) => {
                 setSession(s => ({
                   ...s,
-                  recommendations: s.recommendations.map(r =>
+                  // When adaptive re-ranking fired, the backend returns the
+                  // whole refreshed recommendations array (other cards' rank/
+                  // confidence may have shifted, or an alternate may have been
+                  // swapped in) — otherwise fall back to the original
+                  // single-item update, unchanged from before.
+                  recommendations: updatedRecommendations || s.recommendations.map(r =>
                     r.category === category ? { ...r, status: newStatus } : r
                   ),
                 }));

@@ -18,6 +18,45 @@ const RERANK_OVERLAP_PENALTY_WEIGHT    = 0.35;
 const NEAR_TIE_TOLERANCE               = 5; // confidence points
 const NEAR_TIE_POOL_MAX                = 5;
 
+// ── Epsilon-greedy exploration ───────────────────────────────────────────────
+// weightedRandomPick already adds *some* randomness, but only within a narrow
+// near-tie band around the top scorer — it never explores outside it, so a
+// static wardrobe/context still converges on the same small rotation of
+// "best" outfits. With probability EXPLORATION_EPSILON, surface a candidate
+// from a wider (but still quality-floored — never a poor outfit) band,
+// preferring ones NOT built from recently-recommended items, so neglected
+// wardrobe pieces actually get a turn. Overridable via env var since this is
+// a single, meaningful knob (unlike CATEGORY_WEIGHTS' 100+ values).
+const EXPLORATION_EPSILON             = Number(process.env.EXPLORATION_EPSILON) || 0.05;
+const EXPLORATION_QUALITY_FLOOR_RATIO = 0.70; // candidate must score >= 70% of the pool's top — the "never poor quality" guarantee
+const EXPLORATION_POOL_SIZE           = 8;
+
+/**
+ * Rolls for exploration; returns a chosen candidate or null (meaning: don't
+ * explore this time, or nothing qualified — caller falls back to the normal
+ * weightedRandomPick). `rng`/`epsilonRoll` are both injectable for tests.
+ */
+function explorationPick(pool, rng, recentlyRecommendedItemIds, categoryKey, epsilonRoll = rng()) {
+  if (!pool.length || epsilonRoll >= EXPLORATION_EPSILON) return null;
+
+  const top = pool[0].adjConfidence;
+  const floor = top * EXPLORATION_QUALITY_FLOOR_RATIO;
+  const qualified = pool.filter(p => p.adjConfidence >= floor).slice(0, EXPLORATION_POOL_SIZE);
+  if (qualified.length <= 1) return null; // nothing meaningfully different to explore into
+
+  const rankedByFreshness = qualified
+    .map(p => ({ p, freshness: 1 - overlapWithHistory(p.candidate.sourceItemIds, recentlyRecommendedItemIds) }))
+    .sort((a, b) => b.freshness - a.freshness);
+  const chosen = rankedByFreshness[0].p;
+
+  console.debug('[diversityEngine] exploration pick', {
+    category: categoryKey, epsilon: EXPLORATION_EPSILON,
+    chosenConfidence: chosen.confidence, poolTopConfidence: pool[0].confidence, qualifiedCount: qualified.length,
+  });
+
+  return chosen;
+}
+
 /**
  * Score-weighted random pick restricted to a near-tie band around the top
  * scorer, so relevance is never sacrificed for variety: a candidate outside
@@ -104,13 +143,16 @@ exports.selectDiverse = function selectDiverse(rankedPerCategory, categories, co
     let chosen = null;
 
     if (selectedItemSets.length === 0) {
-      chosen = weightedRandomPick(withHistoryPenalty, rng);
+      chosen = explorationPick(withHistoryPenalty, rng, recentlyRecommendedItemIds, catMeta.key)
+            || weightedRandomPick(withHistoryPenalty, rng);
     } else {
       const topN = withHistoryPenalty.slice(0, TOP_N_CANDIDATES_CONSIDERED);
       const distinct = topN.filter(p =>
         selectedItemSets.every(prevIds => jaccard(p.candidate.sourceItemIds, prevIds) < WITHIN_SESSION_OVERLAP_THRESHOLD)
       );
-      chosen = distinct.length ? weightedRandomPick(distinct, rng) : null;
+      chosen = distinct.length
+        ? (explorationPick(distinct, rng, recentlyRecommendedItemIds, catMeta.key) || weightedRandomPick(distinct, rng))
+        : null;
 
       if (!chosen && topN.length) {
         // Soft re-rank fallback: no candidate clears the distinctness bar —

@@ -22,9 +22,14 @@ function resolveOutfitItems(slots, itemsById) {
  * @param {object} user
  * @param {object} context    - output of contextEngine.buildContext
  * @param {Array}  categories - scoring.RECOMMENDATION_CATEGORIES or WIZARD_CATEGORIES
+ * @param {object} wizardParams - optional { dresscode, budget, indoorOutdoor, dayNight, vibe }
+ *   from the recommendation wizard — only ever passed by generateWizardSession.
+ *   Absent (default {}) for every standard dashboard session, so the 5 new
+ *   scoring dimensions are simply never computed there — zero behavior change
+ *   to the existing 5 non-wizard categories.
  * @returns {Promise<object>} - { [categoryKey]: [{candidate, outfitItems, subScores, mlAcceptanceProbability, confidence, breakdown}, ...] } sorted descending by confidence
  */
-exports.rankForCategories = async function rankForCategories(candidates, user, context, categories) {
+exports.rankForCategories = async function rankForCategories(candidates, user, context, categories, wizardParams = {}) {
   const itemsById = new Map((context.wardrobeItems || []).map(it => [String(it._id), it]));
 
   // 1. Sub-scores — computed once per candidate, independent of category.
@@ -32,7 +37,12 @@ exports.rankForCategories = async function rankForCategories(candidates, user, c
     const outfitItems = resolveOutfitItems(candidate.slots, itemsById);
     const subScores = scoring.computeSubScores(
       outfitItems, candidate.slots, user,
-      { occasion: context.occasion, weather: context.weather },
+      {
+        occasion: context.occasion, weather: context.weather,
+        dresscode: wizardParams.dresscode, budget: wizardParams.budget,
+        indoorOutdoor: wizardParams.indoorOutdoor, dayNight: wizardParams.dayNight,
+        vibe: wizardParams.vibe,
+      },
       context.insights,
       {
         collaborativeSignal: context.cfData?.signal ?? null,
@@ -73,7 +83,7 @@ exports.rankForCategories = async function rankForCategories(candidates, user, c
   categories.forEach(catMeta => {
     rankedPerCategory[catMeta.key] = base
       .map(b => {
-        const { confidence, breakdown } = scoring.finalizeScore(b.subScores, catMeta.key, b.mlAcceptanceProbability);
+        const { confidence, breakdown, ruleScore } = scoring.finalizeScore(b.subScores, catMeta.key, b.mlAcceptanceProbability);
         return {
           candidate: b.candidate,
           outfitItems: b.outfitItems,
@@ -81,6 +91,7 @@ exports.rankForCategories = async function rankForCategories(candidates, user, c
           mlAcceptanceProbability: b.mlAcceptanceProbability,
           confidence,
           breakdown,
+          ruleScore,
         };
       })
       .sort((a, c) => c.confidence - a.confidence);
