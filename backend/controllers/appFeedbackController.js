@@ -11,11 +11,16 @@ exports.submitAppFeedback = async (req, res) => {
   if (message.trim().length < 10) {
     return res.status(400).json({ message: 'Feedback message must be at least 10 characters.' });
   }
-  if (message.trim().length > 2000) {
-    return res.status(400).json({ message: 'Feedback message cannot exceed 2000 characters.' });
+  if (message.trim().length > 1000) {
+    return res.status(400).json({ message: 'Feedback message cannot exceed 1000 characters.' });
   }
 
-  const VALID_TYPES = ['suggestion', 'bug', 'compliment', 'other'];
+  // Must match AppFeedback.js's schema enum exactly (and what FeedbackView.jsx
+  // actually offers) — this previously listed 'bug'/'compliment'/'other',
+  // none of which the schema accepts, so a submission with any of those
+  // values would pass this check and then crash with an uncaught Mongoose
+  // ValidationError at .create() below instead of a clean 400.
+  const VALID_TYPES = ['suggestion', 'complaint', 'improvement'];
   if (!VALID_TYPES.includes(type)) {
     return res.status(400).json({ message: 'Invalid feedback type.' });
   }
@@ -23,7 +28,7 @@ exports.submitAppFeedback = async (req, res) => {
   const feedback = await AppFeedback.create({
     user: req.user._id,
     type,
-    subject: subject?.trim().slice(0, 200) || '',
+    subject: subject?.trim().slice(0, 120) || '',
     message: message.trim(),
     recommendationRating: recommendationRating ? Math.min(5, Math.max(1, Number(recommendationRating))) : undefined,
     satisfactionRating:   satisfactionRating   ? Math.min(5, Math.max(1, Number(satisfactionRating)))   : undefined,

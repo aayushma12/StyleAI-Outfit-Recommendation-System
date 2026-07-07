@@ -109,15 +109,17 @@ def ranking_metrics_endpoint():
     ranking_metrics.py's module docstring for known limitations.
     """
     mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/outfit_recommendation')
-    client = MongoClient(mongo_uri)
+    client = None
     try:
+        client = MongoClient(mongo_uri)
         db = client.get_default_database()
         return jsonify(ranking_metrics.evaluate_ranking_quality(db))
     except Exception as e:
         logging.getLogger(__name__).error('Ranking metrics computation failed: %s', e)
         return jsonify({'error': str(e)}), 500
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
 
 if __name__ == '__main__':
