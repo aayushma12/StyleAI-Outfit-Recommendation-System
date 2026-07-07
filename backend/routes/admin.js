@@ -92,8 +92,12 @@ router.get('/ml/ranking-metrics',             ...guard, ctrl.getRankingMetrics);
 router.get('/wardrobe/ai-coverage',           ...guard, ctrl.getWardrobeAIMetaCoverage);
 router.post('/wardrobe/ai-backfill',          ...guard, ctrl.runWardrobeBackfill);
 
+// ── Usability Evaluation ───────────────────────────────────────────────────────
+router.get('/evaluation-results',             ...guard, ctrl.getEvaluationResults);
+
 // ── Reports & Export ───────────────────────────────────────────────────────────
 router.get('/reports/users',                  ...guard, ctrl.exportUsers);
 router.get('/reports/recommendations',        ...guard, ctrl.exportRecommendations);
+router.get('/reports/evaluation',             ...guard, ctrl.exportEvaluationResults);
 
 module.exports = router;

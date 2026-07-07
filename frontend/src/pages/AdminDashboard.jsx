@@ -50,6 +50,7 @@ const IC = {
   zap:       'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   banned:    ['M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z','M12 9v4','M12 17h.01'],
   cpu:       ['M9 3H5a2 2 0 0 0-2 2v4','M9 3h6','M15 3h4a2 2 0 0 1 2 2v4','M21 9v6','M21 15h-4a6 6 0 0 0-6 6v4','M15 21H9','M9 21H5a2 2 0 0 1-2-2v-4','M3 15V9','M3 9h4a6 6 0 0 0 6-6V0'],
+  clipboard: ['M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1z','M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2','M9 12h6','M9 16h6'],
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -149,7 +150,7 @@ function ToastContainer({ toasts, remove }) {
       {toasts.map(t => (
         <div key={t.id} className={`ad-toast ad-toast-${t.type}`}>
           <span>{t.msg}</span>
-          <button className="ad-toast-close" onClick={() => remove(t.id)}>×</button>
+          <button className="ad-toast-close" onClick={() => remove(t.id)} aria-label="Dismiss notification">×</button>
         </div>
       ))}
     </div>
@@ -186,6 +187,7 @@ const TABS = [
   { key:'recs',      label:'Recommendations', icon:'recs'      },
   { key:'ml',        label:'ML Model',        icon:'ml'        },
   { key:'feedback',  label:'Feedback',        icon:'feedback'  },
+  { key:'evaluation',label:'Evaluation',      icon:'clipboard' },
   { key:'logs',      label:'Logs',            icon:'logs'      },
   { key:'settings',  label:'Settings',        icon:'settings'  },
 ];
@@ -1294,6 +1296,34 @@ function MLTab({ toast }) {
             </div>
           )}
 
+          {typeof info?.brierScore === 'number' && (
+            <div className="ad-card ad-card-p" style={{ marginTop:18 }}>
+              <h4 className="ad-card-title">Confidence Calibration</h4>
+              <p style={{ fontSize:'0.8rem', color:'var(--clr-text-muted)', marginBottom:10 }}>
+                Out-of-fold Brier score for the raw acceptance model (lower is better — 0 is perfect, ~0.25 is what a coin-flip predictor scores).
+                Correction method: <strong>{info.calibrationMethod === 'none' ? 'none applied' : info.calibrationMethod}</strong>.
+              </p>
+              <div className="ad-stats-grid">
+                <StatCard icon="check" label="Brier Score" value={info.brierScore.toFixed(3)} bg={info.brierScore < 0.20 ? '#059669' : '#DC2626'} />
+              </div>
+              {info.calibrationBins?.length > 0 && (
+                <div className="ad-table-wrap" style={{ marginTop:12 }}>
+                  <table className="ad-table">
+                    <thead><tr><th>Mean Predicted</th><th>Actual Accepted Fraction</th></tr></thead>
+                    <tbody>
+                      {info.calibrationBins.map((b, i) => (
+                        <tr key={i}><td>{Math.round(b.meanPredicted * 100)}%</td><td>{Math.round(b.actualFraction * 100)}%</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p style={{ fontSize:'0.75rem', color:'var(--clr-text-muted)', marginTop:8 }}>
+                A well-calibrated model's "mean predicted" and "actual accepted fraction" columns track closely. Correction (Platt scaling) is opt-in via <code style={{ fontFamily:'var(--font-mono)' }}>CALIBRATE_MODEL=true</code> — off by default since this project's measured Brier score is below the miscalibration threshold used here.
+              </p>
+            </div>
+          )}
+
           <div className="ad-card ad-card-p" style={{ marginTop:18 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
               <div>
@@ -1424,6 +1454,106 @@ function FeedbackTab({ toast }) {
             <Btn variant="outline" onClick={() => setSelected(null)}>Close</Btn>
           </div>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── EVALUATION TAB ────────────────────────────────────────────────────────────
+const EVAL_QUESTIONS = [
+  { key: 'recommendationQuality', label: 'Recommendation Quality' },
+  { key: 'easeOfUse',             label: 'Ease of Use' },
+  { key: 'visualDesign',          label: 'Visual Design' },
+  { key: 'systemSpeed',           label: 'System Speed' },
+  { key: 'overallSatisfaction',   label: 'Overall Satisfaction' },
+];
+
+function EvaluationTab({ toast }) {
+  const [count,     setCount]     = useState(0);
+  const [averages,  setAverages]  = useState({});
+  const [responses, setResponses] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get('/admin/evaluation-results')
+      .then(({ data }) => { setCount(data.count); setAverages(data.averages); setResponses(data.responses); })
+      .catch(() => toast('Failed to load evaluation results.', 'error'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, []);
+
+  return (
+    <div>
+      <div className="ad-page-hd">
+        <div>
+          <h3 className="ad-page-title">Usability Evaluation</h3>
+          <p className="ad-page-sub">Participant responses from the public usability survey at /evaluation.</p>
+        </div>
+        <div className="ad-page-actions">
+          <Btn variant="outline" onClick={() => window.open('/api/admin/reports/evaluation', '_blank')}>
+            <Ic d={IC.download} size={14} /> Export CSV
+          </Btn>
+        </div>
+      </div>
+
+      {loading ? <Spinner /> : count === 0 ? (
+        <div className="ad-empty">
+          <div className="ad-empty-icon"><Ic d={IC.clipboard} size={26} /></div>
+          <div className="ad-empty-title">No evaluation responses yet</div>
+        </div>
+      ) : (
+        <>
+          <div className="ad-stats-grid">
+            <StatCard icon="users" label="Total Responses" value={fmt(count)} bg="#7C3AED" />
+            {EVAL_QUESTIONS.map(q => (
+              <StatCard key={q.key} icon="bar" label={q.label} value={`${averages[q.key]?.toFixed(2) ?? '—'} / 5`} bg="#0D9488" />
+            ))}
+          </div>
+
+          <div className="ad-card ad-card-p" style={{ marginTop: 18, marginBottom: 18 }}>
+            <h4 className="ad-card-title">Average Rating by Question</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {EVAL_QUESTIONS.map(q => {
+                const avg = averages[q.key] || 0;
+                const w = Math.round((avg / 5) * 100);
+                return (
+                  <div key={q.key} className="ad-bar-row">
+                    <div className="ad-bar-hd"><span>{q.label}</span><span>{avg.toFixed(2)} / 5</span></div>
+                    <div className="ad-bar-track"><div className="ad-bar-fill" style={{ width: `${w}%`, background: '#0D9488' }} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="ad-card ad-card-p">
+            <h4 className="ad-card-title">Responses</h4>
+            <div className="ad-table-wrap">
+              <table className="ad-table">
+                <thead>
+                  <tr>
+                    <th>Participant</th>
+                    {EVAL_QUESTIONS.map(q => <th key={q.key}>{q.label}</th>)}
+                    <th>Comments</th>
+                    <th>Submitted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {responses.map(r => (
+                    <tr key={r._id}>
+                      <td>{r.participantLabel || 'Anonymous'}</td>
+                      {EVAL_QUESTIONS.map(q => <td key={q.key}>{r[q.key]}</td>)}
+                      <td style={{ maxWidth: 240, whiteSpace: 'normal' }}>{r.comments || '—'}</td>
+                      <td>{fmtDate(r.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -1603,6 +1733,7 @@ export default function AdminDashboard() {
     recs:      <RecsTab          toast={toast} />,
     ml:        <MLTab            toast={toast} />,
     feedback:  <FeedbackTab      toast={toast} />,
+    evaluation:<EvaluationTab    toast={toast} />,
     logs:      <LogsTab          toast={toast} />,
     settings:  <SettingsAdminTab toast={toast} />,
   };

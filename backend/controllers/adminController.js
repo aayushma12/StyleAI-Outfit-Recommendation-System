@@ -15,6 +15,7 @@ const BehaviorLog     = require('../models/BehaviorLog');
 const AIConversation  = require('../models/AIConversation');
 const UserHistory     = require('../models/UserHistory');
 const UserSimilarity  = require('../models/UserSimilarity');
+const EvaluationResponse = require('../models/EvaluationResponse');
 const axios           = require('axios');
 const { STRONG_PASSWORD, PASSWORD_ERROR_MSG, escapeRegex } = require('../utils/validation');
 const { getLastNMonthRanges } = require('../utils/dateRanges');
@@ -861,5 +862,45 @@ exports.exportRecommendations = async (req, res) => {
 
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="styleai_recommendations_${Date.now()}.csv"`);
+  res.send(csv);
+};
+
+// ── Usability Evaluation ───────────────────────────────────────────────────────
+
+const EVALUATION_LIKERT_FIELDS = ['recommendationQuality', 'easeOfUse', 'visualDesign', 'systemSpeed', 'overallSatisfaction'];
+
+exports.getEvaluationResults = async (req, res) => {
+  const responses = await EvaluationResponse.find({}).sort({ createdAt: -1 }).limit(1000).lean();
+
+  const count = responses.length;
+  const averages = {};
+  EVALUATION_LIKERT_FIELDS.forEach(field => {
+    averages[field] = count > 0
+      ? Math.round((responses.reduce((s, r) => s + (r[field] || 0), 0) / count) * 100) / 100
+      : 0;
+  });
+
+  res.json({ count, averages, responses });
+};
+
+exports.exportEvaluationResults = async (req, res) => {
+  const responses = await EvaluationResponse.find({}).sort({ createdAt: -1 }).limit(1000).lean();
+
+  const csv = [
+    'Participant,Recommendation Quality,Ease of Use,Visual Design,System Speed,Overall Satisfaction,Comments,Submitted',
+    ...responses.map(r => [
+      `"${r.participantLabel || 'Anonymous'}"`,
+      r.recommendationQuality,
+      r.easeOfUse,
+      r.visualDesign,
+      r.systemSpeed,
+      r.overallSatisfaction,
+      `"${(r.comments || '').replace(/"/g, '""')}"`,
+      r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '',
+    ].join(',')),
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="styleai_evaluation_${Date.now()}.csv"`);
   res.send(csv);
 };

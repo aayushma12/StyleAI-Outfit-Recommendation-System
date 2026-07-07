@@ -83,7 +83,6 @@ app.use('/api/auth/',     authLimiter);
 app.use('/api/ai/chat',   aiLimiter);
 
 app.use('/api/auth',            require('./routes/auth'));
-app.use('/api/upload',          require('./routes/upload'));
 app.use('/api/users',           require('./routes/users'));
 app.use('/api/wardrobe',        require('./routes/wardrobe'));
 app.use('/api/calendar',        require('./routes/calendar'));
@@ -91,6 +90,7 @@ app.use('/api/app-feedback',    require('./routes/appFeedback'));
 app.use('/api/history',         require('./routes/history'));
 app.use('/api/ai',              require('./routes/ai'));
 app.use('/api/recommendations', aiLimiter, require('./routes/recommendations'));
+app.use('/api/evaluation',      require('./routes/evaluation'));
 app.use('/api/admin',           require('./routes/admin'));
 
 app.use((err, req, res, _next) => {

@@ -1,0 +1,214 @@
+.ev-root {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 48px 20px;
+  background: var(--bg-base);
+}
+
+.ev-card {
+  width: 100%;
+  max-width: 640px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  box-shadow: var(--shadow-sm);
+}
+
+.ev-logo {
+  display: inline-block;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-decoration: none;
+  margin-bottom: 8px;
+}
+
+.ev-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 8px 0 6px;
+}
+
+.ev-sub {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+
+.ev-field {
+  margin-bottom: 22px;
+}
+
+.ev-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.ev-optional {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--text-placeholder);
+  letter-spacing: normal;
+}
+
+.ev-input,
+.ev-textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 0.925rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  transition: border-color var(--t-base), box-shadow var(--t-base);
+}
+
+.ev-input::placeholder,
+.ev-textarea::placeholder { color: var(--text-placeholder); }
+
+.ev-input:focus,
+.ev-textarea:focus {
+  border-color: var(--clr-primary-500);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+}
+
+.ev-textarea { resize: vertical; }
+
+.ev-question {
+  padding: 16px;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+  transition: border-color var(--t-base);
+}
+
+.ev-question--error {
+  border-color: var(--clr-error);
+  background: var(--clr-error-bg);
+}
+
+.ev-q-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ev-q-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 2px 0 10px;
+  line-height: 1.5;
+}
+
+.ev-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.ev-star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--border-default);
+  padding: 2px;
+  transition: color var(--t-fast), transform var(--t-fast);
+}
+
+.ev-star:hover { transform: scale(1.08); }
+
+.ev-star--filled { color: #F59E0B; }
+
+.ev-field-error {
+  color: var(--clr-error);
+  font-size: 0.78rem;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.ev-error-banner {
+  background: var(--clr-error-bg);
+  color: var(--clr-error);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
+.ev-submit-btn {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--clr-primary-600);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background var(--t-base);
+}
+
+.ev-submit-btn:hover:not(:disabled) { background: var(--clr-primary-700); }
+.ev-submit-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.ev-success {
+  text-align: center;
+  padding: 56px 40px;
+}
+
+.ev-success-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: var(--clr-success-bg);
+  color: var(--clr-success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.ev-success h2 {
+  font-size: 1.3rem;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.ev-success p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.ev-back-link {
+  color: var(--clr-primary-600);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.ev-back-link:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .ev-root { padding: 28px 14px; }
+  .ev-card { padding: 24px; }
+}
+
+@media (max-width: 400px) {
+  .ev-card { padding: 18px; }
+  .ev-star { font-size: 1.5rem; }
+}
