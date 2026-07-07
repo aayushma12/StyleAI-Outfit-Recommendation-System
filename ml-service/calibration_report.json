@@ -1,0 +1,118 @@
+{
+  "rawModel": {
+    "brierScore": 0.1828,
+    "bins": [
+      {
+        "meanPredicted": 0.1073,
+        "actualFraction": 0.2249
+      },
+      {
+        "meanPredicted": 0.2333,
+        "actualFraction": 0.3755
+      },
+      {
+        "meanPredicted": 0.3406,
+        "actualFraction": 0.5251
+      },
+      {
+        "meanPredicted": 0.4403,
+        "actualFraction": 0.6474
+      },
+      {
+        "meanPredicted": 0.5338,
+        "actualFraction": 0.7052
+      },
+      {
+        "meanPredicted": 0.621,
+        "actualFraction": 0.7475
+      },
+      {
+        "meanPredicted": 0.7025,
+        "actualFraction": 0.8319
+      },
+      {
+        "meanPredicted": 0.7757,
+        "actualFraction": 0.8832
+      },
+      {
+        "meanPredicted": 0.841,
+        "actualFraction": 0.9236
+      },
+      {
+        "meanPredicted": 0.8949,
+        "actualFraction": 0.9498
+      }
+    ],
+    "sampleSize": 9159,
+    "wellCalibrated": true,
+    "available": true
+  },
+  "displayedConfidence": {
+    "available": true,
+    "brierScore": 0.1656,
+    "bins": [
+      {
+        "range": "0-10%",
+        "n": 12,
+        "meanPredicted": 0.0658,
+        "actualAcceptanceRate": 0.0833
+      },
+      {
+        "range": "10-20%",
+        "n": 39,
+        "meanPredicted": 0.1523,
+        "actualAcceptanceRate": 0.0256
+      },
+      {
+        "range": "20-30%",
+        "n": 150,
+        "meanPredicted": 0.2581,
+        "actualAcceptanceRate": 0.1333
+      },
+      {
+        "range": "30-40%",
+        "n": 350,
+        "meanPredicted": 0.3566,
+        "actualAcceptanceRate": 0.1571
+      },
+      {
+        "range": "40-50%",
+        "n": 824,
+        "meanPredicted": 0.4521,
+        "actualAcceptanceRate": 0.3216
+      },
+      {
+        "range": "50-60%",
+        "n": 1622,
+        "meanPredicted": 0.5541,
+        "actualAcceptanceRate": 0.5123
+      },
+      {
+        "range": "60-70%",
+        "n": 1898,
+        "meanPredicted": 0.6558,
+        "actualAcceptanceRate": 0.6781
+      },
+      {
+        "range": "70-80%",
+        "n": 1701,
+        "meanPredicted": 0.7488,
+        "actualAcceptanceRate": 0.8183
+      },
+      {
+        "range": "80-90%",
+        "n": 1374,
+        "meanPredicted": 0.8408,
+        "actualAcceptanceRate": 0.9105
+      },
+      {
+        "range": "90-100%",
+        "n": 1189,
+        "meanPredicted": 0.9569,
+        "actualAcceptanceRate": 0.9571
+      }
+    ],
+    "sampleSize": 9159,
+    "wellCalibrated": true
+  }
+}

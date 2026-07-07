@@ -275,3 +275,47 @@ def test_train_and_evaluate_provenance_metrics_are_none_without_the_column():
     assert metrics['synthetic_fraction'] is None
     assert metrics['real_sample_count'] is None
     assert metrics['persona_count'] is None
+
+
+# ── Calibration (build_pipeline_calibrated + get_feature_importance) ───────
+
+def _varied_dataframe(n=200, seed=7):
+    import random
+    random.seed(seed)
+    rows = []
+    for i in range(n):
+        label = i % 2
+        base = 80 if label == 1 else 20
+        rows.append({**{f: base / 100 + random.uniform(-0.05, 0.05) for f in trainer.SCORE_FEATURES},
+                     'occasionFormality': random.choice([0, 1, 2, 3, 4]),
+                     'isWardrobeOnly': random.choice([0, 1]),
+                     'weatherTier': random.choice(['cold', 'mild', 'hot']),
+                     'label': label})
+    return pd.DataFrame(rows)
+
+
+def test_build_pipeline_calibrated_trains_and_predicts_without_error():
+    df = _varied_dataframe()
+    pipeline, metrics = trainer.train_and_evaluate(df, pipeline_builder=trainer.build_pipeline_calibrated)
+    assert 0 <= metrics['accuracy'] <= 1
+    # predict_proba must still work end-to-end through the calibration wrapper
+    probs = pipeline.predict_proba(df[trainer.ALL_FEATURES])[:, 1]
+    assert len(probs) == len(df)
+    assert all(0 <= p <= 1 for p in probs)
+
+
+def test_get_feature_importance_works_on_a_calibrated_pipeline_by_averaging_fold_coefficients():
+    df = _varied_dataframe()
+    pipeline, _ = trainer.train_and_evaluate(df, pipeline_builder=trainer.build_pipeline_calibrated)
+    importance = trainer.get_feature_importance(pipeline, top_n=5)
+    assert len(importance) == 5
+    for entry in importance:
+        assert 'feature' in entry and 'coefficient' in entry and 'direction' in entry
+        assert entry['direction'] in ('increases acceptance', 'decreases acceptance')
+
+
+def test_get_feature_importance_still_works_on_the_uncalibrated_pipeline():
+    df = _varied_dataframe()
+    pipeline, _ = trainer.train_and_evaluate(df)  # default build_pipeline
+    importance = trainer.get_feature_importance(pipeline, top_n=3)
+    assert len(importance) == 3

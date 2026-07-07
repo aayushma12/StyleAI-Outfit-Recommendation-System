@@ -55,6 +55,7 @@ import joblib
 
 from sklearn.linear_model    import LogisticRegression
 from sklearn.ensemble        import GradientBoostingClassifier
+from sklearn.calibration     import CalibratedClassifierCV
 from sklearn.preprocessing   import OneHotEncoder
 from sklearn.compose         import ColumnTransformer
 from sklearn.pipeline        import Pipeline
@@ -202,6 +203,35 @@ def build_pipeline() -> Pipeline:
     ])
 
 
+def build_pipeline_calibrated(method: str = None) -> Pipeline:
+    """
+    Same Logistic Regression as build_pipeline(), wrapped in
+    CalibratedClassifierCV. Not the default (see calibration_analysis.py's
+    real, measured verdict: raw-model Brier score 0.183, below the 0.20
+    "meaningfully miscalibrated" threshold used there — an honest finding of
+    "adequate, not broken"). Kept available and fully tested because the
+    reliability diagram does show a real, visible underconfidence pattern in
+    the low-to-mid probability range, even though the aggregate Brier score
+    doesn't cross the threshold — opt in via CALIBRATE_MODEL=true.
+
+    method='sigmoid' (Platt scaling) is the default rather than 'isotonic' —
+    isotonic regression is non-parametric and needs more data to avoid
+    overfitting than this project's ~200 real samples provide; Platt's
+    2-parameter logistic fit is the safer choice at this dataset size.
+    """
+    method = method or os.getenv("CALIBRATION_METHOD", "sigmoid")
+    preprocessor = ColumnTransformer(transformers=[
+        ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), CATEGORICAL_FEATURES),
+        ("num", "passthrough", NUMERICAL_FEATURES),
+    ])
+    base = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE)
+    calibrated = CalibratedClassifierCV(base, method=method, cv=3)
+    return Pipeline(steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", calibrated),
+    ])
+
+
 def build_pipeline_gb() -> Pipeline:
     """
     Second candidate algorithm for the documented LR-vs-GB comparison (see
@@ -346,13 +376,30 @@ def get_feature_importance(pipeline: Pipeline, top_n: int = 20) -> list:
     Logistic regression coefficients as signed feature importances — the
     sign tells you WHICH DIRECTION a feature pushes acceptance, unlike a
     Random Forest's magnitude-only feature_importances_.
+
+    Handles both a raw LogisticRegression (has .coef_ directly) and a
+    CalibratedClassifierCV-wrapped one (build_pipeline_calibrated) — the
+    latter fits several fold-cloned copies of the base estimator internally
+    (.calibrated_classifiers_), so their coefficients are averaged for one
+    stable, representative report rather than picking one fold arbitrarily.
+    Returns [] for an estimator with neither (e.g. a tree ensemble) rather
+    than raising — this endpoint degrades gracefully, it doesn't 500.
     """
     preprocessor = pipeline.named_steps["preprocessor"]
     classifier   = pipeline.named_steps["classifier"]
 
     cat_names = preprocessor.named_transformers_["cat"].get_feature_names_out(CATEGORICAL_FEATURES).tolist()
     all_names = cat_names + NUMERICAL_FEATURES
-    coefs     = classifier.coef_[0]
+
+    if hasattr(classifier, "coef_"):
+        coefs = classifier.coef_[0]
+    elif hasattr(classifier, "calibrated_classifiers_"):
+        fold_coefs = [cc.estimator.coef_[0] for cc in classifier.calibrated_classifiers_ if hasattr(cc.estimator, "coef_")]
+        if not fold_coefs:
+            return []
+        coefs = np.mean(fold_coefs, axis=0)
+    else:
+        return []
 
     order = np.argsort(np.abs(coefs))[::-1][:top_n]
     return [

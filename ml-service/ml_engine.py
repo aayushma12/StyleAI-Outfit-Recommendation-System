@@ -19,6 +19,7 @@ import pandas as pd
 from pymongo import MongoClient
 
 import acceptance_trainer as trainer
+import calibration_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,9 @@ def get_model_info():
         'realSampleCount':   meta.get('realSampleCount'),
         'personaCount':      meta.get('personaCount'),
         'algorithmComparison': meta.get('algorithmComparison'),
+        'brierScore':        meta.get('brierScore'),
+        'calibrationMethod': meta.get('calibrationMethod', 'none'),
+        'calibrationBins':   meta.get('calibrationBins'),
         'algorithm':    meta.get('algorithm', 'LogisticRegression (class_weight=balanced, max_iter=1000)'),
         'encoding':     'OneHotEncoder for weatherTier + passthrough for the 9 scoring dimensions',
         'features':     trainer.ALL_FEATURES,
@@ -146,12 +150,23 @@ def retrain():
     # acceptance_trainer.compare_algorithms for the data-driven recommendation
     # of which one to actually pick (informational — doesn't auto-switch this).
     algorithm = os.getenv('ML_ALGORITHM', 'logistic_regression')
-    pipeline_builder = trainer.build_pipeline_gb if algorithm == 'gradient_boosting' else trainer.build_pipeline
-    algorithm_label = (
-        'GradientBoostingClassifier (n_estimators=150, max_depth=3, learning_rate=0.05)'
-        if algorithm == 'gradient_boosting'
-        else 'LogisticRegression (class_weight=balanced, max_iter=1000)'
-    )
+    # Calibration correction — opt-in, off by default. calibration_analysis.py's
+    # real, measured verdict on this project's data: raw-model Brier score
+    # 0.183, below the 0.20 "meaningfully miscalibrated" threshold used there —
+    # an "adequate, not broken" finding, so not applied automatically. Still a
+    # real, fully-tested capability (CALIBRATE_MODEL=true) since the
+    # reliability diagram shows a genuine, if modest, underconfidence pattern.
+    calibrate = os.getenv('CALIBRATE_MODEL', 'false').lower() == 'true'
+
+    if calibrate and algorithm != 'gradient_boosting':
+        pipeline_builder = trainer.build_pipeline_calibrated
+        algorithm_label = f"LogisticRegression + CalibratedClassifierCV({os.getenv('CALIBRATION_METHOD', 'sigmoid')})"
+    elif algorithm == 'gradient_boosting':
+        pipeline_builder = trainer.build_pipeline_gb
+        algorithm_label = 'GradientBoostingClassifier (n_estimators=150, max_depth=3, learning_rate=0.05)'
+    else:
+        pipeline_builder = trainer.build_pipeline
+        algorithm_label = 'LogisticRegression (class_weight=balanced, max_iter=1000)'
 
     try:
         df = trainer.load_training_data(db)
@@ -165,6 +180,16 @@ def retrain():
         # degrades to {'available': False, ...} on a still-small dataset
         # rather than failing the whole retrain.
         algorithm_comparison = trainer.compare_algorithms(df)
+
+        # Real, measured calibration — the raw (uncalibrated) model's
+        # out-of-fold Brier score, reported every retrain regardless of
+        # whether CALIBRATE_MODEL is on, so the admin panel always shows an
+        # honest, current number rather than a stale one-off measurement.
+        try:
+            calibration_result = calibration_analysis.evaluate_raw_model_calibration(df)
+        except Exception as e:
+            logger.warning('Calibration analysis skipped: %s', e)
+            calibration_result = None
 
         _backup_current_model()
         trainer.save_model(pipeline, MODEL_PATH)
@@ -187,6 +212,9 @@ def retrain():
             'personaCount':      metrics.get('persona_count'),
             'algorithm':          algorithm_label,
             'algorithmComparison': algorithm_comparison,
+            'brierScore':         calibration_result.get('brierScore') if calibration_result else None,
+            'calibrationMethod':  (f"platt ({os.getenv('CALIBRATION_METHOD', 'sigmoid')})" if calibrate else 'none'),
+            'calibrationBins':    calibration_result.get('bins') if calibration_result else None,
         }
         _save_meta(meta)
         logger.info('Retrain complete — version %s, accuracy %.4f, trainingSize %d.',
