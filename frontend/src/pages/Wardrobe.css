@@ -741,6 +741,7 @@ body.dark-mode .wd-stat-chip { background: rgba(13,148,136,0.1); border-color: r
 }
 .wd-tag--purple { background: var(--wd-primary-l); color: var(--wd-primary); }
 .wd-tag--green  { background: var(--wd-green-l);   color: var(--wd-green); }
+.wd-tag--warn   { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
 .wd-tag-row     { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
 
 .wd-color-dot {

@@ -447,6 +447,9 @@ export default function RecommendationPanel() {
   const [error,      setError]      = useState('');
   const [showWizard, setShowWizard] = useState(false);
   const [weights,    setWeights]    = useState(null);
+  const [toast,      setToast]      = useState('');
+
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   useEffect(() => {
     api.get('/recommendations/latest')
@@ -481,6 +484,8 @@ export default function RecommendationPanel() {
 
   return (
     <div className="rp-panel">
+
+      {toast && <div className="rp-toast">{toast}</div>}
 
       {/* Header */}
       <div className="rp-panel-hd">
@@ -579,6 +584,7 @@ export default function RecommendationPanel() {
                     r.category === category ? { ...r, status: newStatus } : r
                   ),
                 }));
+                if (newStatus === 'saved') showToast('Outfit saved! ✓');
               }}
             />
           )}

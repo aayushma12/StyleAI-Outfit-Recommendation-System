@@ -2,6 +2,8 @@
 
 const request = require('supertest');
 const app = require('../../app');
+const WardrobeItem = require('../../models/WardrobeItem');
+const WardrobeCombo = require('../../models/WardrobeCombo');
 
 async function registerAndGetToken(email) {
   const res = await request(app).post('/api/auth/register').send({
@@ -92,6 +94,49 @@ describe('Wardrobe item CRUD + validation', () => {
   });
 });
 
+describe('AI-detected metadata actually persists (regression: pattern used to be silently dropped)', () => {
+  let token;
+  beforeEach(async () => {
+    token = await registerAndGetToken(`ai-meta-persist-${Date.now()}-${Math.random()}@example.com`);
+  });
+
+  test('pattern, neckline, genderCategory, and details all persist on create', async () => {
+    const res = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`).send({
+      name: 'AI Tagged Item', category: 'tops', color: 'blue',
+      pattern: 'striped', neckline: 'v_neck', genderCategory: 'women',
+      details: { hasHood: false, hasButtons: true, hasZipper: false, hasPockets: false, hasLogo: false, hasBelt: false, isTransparent: false },
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.item.pattern).toBe('striped');
+    expect(res.body.item.neckline).toBe('v_neck');
+    expect(res.body.item.genderCategory).toBe('women');
+    expect(res.body.item.details.hasButtons).toBe(true);
+
+    // Re-fetch independently to confirm it actually reached the database,
+    // not just echoed back in the create response.
+    const refetch = await request(app).get(`/api/wardrobe/${res.body.item._id}`).set('Authorization', `Bearer ${token}`);
+    expect(refetch.body.item.pattern).toBe('striped');
+    expect(refetch.body.item.neckline).toBe('v_neck');
+    expect(refetch.body.item.genderCategory).toBe('women');
+  });
+
+  test('pattern, neckline, genderCategory, and details all persist on update', async () => {
+    const create = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Update Target', category: 'tops', color: 'red' });
+    const id = create.body.item._id;
+
+    const update = await request(app).put(`/api/wardrobe/${id}`).set('Authorization', `Bearer ${token}`).send({
+      pattern: 'floral', neckline: 'boat_neck', genderCategory: 'unisex',
+      details: { hasHood: true, hasButtons: false, hasZipper: true, hasPockets: false, hasLogo: false, hasBelt: false, isTransparent: false },
+    });
+    expect(update.status).toBe(200);
+    expect(update.body.item.pattern).toBe('floral');
+    expect(update.body.item.neckline).toBe('boat_neck');
+    expect(update.body.item.genderCategory).toBe('unisex');
+    expect(update.body.item.details.hasZipper).toBe(true);
+  });
+});
+
 describe('Deleting a wardrobe item referenced by a saved combo', () => {
   let token;
   beforeEach(async () => {
@@ -136,5 +181,49 @@ describe('POST /api/wardrobe/analyze', () => {
     const res = await request(app).post('/api/wardrobe/analyze').set('Authorization', `Bearer ${token}`)
       .send({ imageUrl: 'http://internal-service:8000/secrets' });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/wardrobe/outfit-preview — ad-hoc composite, never persisted', () => {
+  let token, userId;
+  beforeEach(async () => {
+    const email = `outfit-preview-test-${Date.now()}-${Math.random()}@example.com`;
+    const res = await request(app).post('/api/auth/register').send({
+      name: 'Preview Test User', email, password: 'StrongP@ss123', consentGiven: 'true',
+    });
+    token = res.body.token;
+    userId = res.body.user?._id || res.body.user?.id;
+  });
+
+  test('returns { url: null } when no item ids are supplied', async () => {
+    const res = await request(app).get('/api/wardrobe/outfit-preview').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ url: null });
+  });
+
+  test('returns { url: null } gracefully when items have no real images, and never creates a WardrobeCombo', async () => {
+    const item = await WardrobeItem.create({ user: userId, name: 'Test Top', category: 'tops', color: 'blue' });
+
+    const res = await request(app).get(`/api/wardrobe/outfit-preview?items=${item._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ url: null });
+    expect(await WardrobeCombo.countDocuments({ user: userId })).toBe(0);
+  });
+
+  test('only composites items belonging to the requesting user', async () => {
+    const otherRes = await request(app).post('/api/auth/register').send({
+      name: 'Other User', email: `outfit-preview-other-${Date.now()}@example.com`,
+      password: 'StrongP@ss123', consentGiven: 'true',
+    });
+    const otherUserId = otherRes.body.user?._id || otherRes.body.user?.id;
+    const otherItem = await WardrobeItem.create({ user: otherUserId, name: 'Not Mine', category: 'tops', color: 'red' });
+
+    const res = await request(app).get(`/api/wardrobe/outfit-preview?items=${otherItem._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ url: null });
   });
 });

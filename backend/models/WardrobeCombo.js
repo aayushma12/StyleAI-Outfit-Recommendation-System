@@ -26,6 +26,16 @@ const wardrobeComboSchema = new mongoose.Schema({
   },
   lastUsedAt: { type: Date, default: null },
   timesReused: { type: Number, default: 0 },
+
+  // Generated asynchronously after save (see outfitPreviewService.js) — a
+  // single collage image combining this outfit's item photos. May be empty
+  // for a moment right after saving; the UI falls back to per-item thumbnails
+  // until this populates.
+  previewImage: {
+    url:         { type: String, default: '' },
+    publicId:    { type: String, default: '' },
+    generatedAt: { type: Date,   default: null },
+  },
 }, { timestamps: true });
 
 wardrobeComboSchema.index({ user: 1, createdAt: -1 });

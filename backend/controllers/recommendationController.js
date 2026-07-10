@@ -11,6 +11,7 @@ const { generateWardrobeUtilizationReport,
         generateStyleNarrative } = require('../services/personalizedLearningService');
 const { CATEGORY_WEIGHTS }     = require('../services/scoringService');
 const adaptiveRerank           = require('../services/adaptiveRerankService');
+const outfitPreview            = require('../services/outfitPreviewService');
 const ki                       = require('../services/kathmanduIntelligence');
 const popularity               = require('../services/popularityService');
 const Recommendation           = require('../models/Recommendation');
@@ -221,8 +222,9 @@ exports.submitFeedback = async (req, res) => {
   // matching how the manual Outfit Builder flow already only saves owned items.
   if (status === 'saved') {
     const items = Object.values(rec.outfit || {}).map(s => s?.item).filter(Boolean);
+    const comboFilter = { user: req.user._id, sourceRecommendationId: session._id, sourceCategory: category };
     await WardrobeCombo.findOneAndUpdate(
-      { user: req.user._id, sourceRecommendationId: session._id, sourceCategory: category },
+      comboFilter,
       {
         $set: {
           name: rec.outfitName,
@@ -239,6 +241,20 @@ exports.submitFeedback = async (req, res) => {
       },
       { upsert: true, setDefaultsOnInsert: true }
     );
+
+    // Fire-and-forget — same non-blocking pattern as the manual Outfit
+    // Builder save (see wardrobeController.saveCombination).
+    if (items.length) {
+      WardrobeItem.find({ _id: { $in: items } }, 'imageUrl').lean()
+        .then(itemDocs => outfitPreview.generatePreviewImage(itemDocs.map(i => i.imageUrl)))
+        .then(preview => {
+          if (preview) {
+            return WardrobeCombo.findOneAndUpdate(comboFilter, {
+              previewImage: { ...preview, generatedAt: new Date() },
+            });
+          }
+        }).catch(() => {});
+    }
   } else if (previousStatus === 'saved') {
     // Status moved away from 'saved' (e.g. Undo, or re-rating as disliked) —
     // the linked combo should disappear from Saved Outfits too.

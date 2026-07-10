@@ -102,6 +102,7 @@ const KATHMANDU_VENUES = {
   cafe:        { note: 'Kathmandu\'s thriving cafe culture (Jhamsikhel, Lazimpat, Kupondole) is style-forward. Smart casual, minimalist, or creative styles photograph well.', vibe: 'trendy' },
   wedding:     { note: 'Traditional Nepali weddings require traditional or semi-traditional attire. Sari, lehenga, or formal salwar kameez. Bright/festive colours. Heavy jewellery expected for close family.', vibe: 'traditional' },
   temple:      { note: 'Modest attire required near temples and religious sites. Cover knees and shoulders. Traditional dress greatly appreciated.', vibe: 'modest' },
+  mall:        { note: 'Kathmandu malls (Civil Mall, Labim Mall, City Centre, New Baneshwor chains) are casual browsing spaces — smart casual or trendy streetwear both work, comfortable footwear matters since visits involve a lot of walking between floors.', vibe: 'casual' },
 };
 
 const KATHMANDU_TRENDS_2025 = [
@@ -126,6 +127,10 @@ const KATHMANDU_TRENDS_2025 = [
   'Convertible dupatta styling — draping the same dupatta multiple ways across office, festival, and casual looks',
   'Chunky knit scarves in bright contrast colors as the go-to winter accessory over plain black',
   'Reworked thrifted denim (patched, embroidered) gaining popularity in Thamel and college circles',
+  'Minimalist fashion: solid neutral basics, clean silhouettes, and one deliberate accent piece over busy prints',
+  'Smart casual crossover: blazers or structured jackets worn over simple tees with jeans for office-to-cafe versatility',
+  'Indo-western fusion: kurta-style tops paired with jeans, or crop tops layered under unstitched dupatta drapes',
+  'Mall-and-cafe weekend uniform: oversized hoodie or shacket with straight-leg jeans and canvas sneakers',
 ];
 
 // ── Seasonal styling notes — genuinely distinct from KATHMANDU_CLIMATE's

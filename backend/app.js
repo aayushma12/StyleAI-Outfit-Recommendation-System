@@ -78,6 +78,15 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
 app.use(mongoSanitize());
 
+// Auth is a cookie (not a header the browser strips from cache lookups), so
+// without this, a GET response fetched as one user can be served straight
+// from the browser's HTTP cache after a different user logs in on the same
+// tab/browser — looking exactly like one user's data "leaking" to another.
+app.use('/api/', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
 app.use('/api/',          apiLimiter);
 app.use('/api/auth/',     authLimiter);
 app.use('/api/ai/chat',   aiLimiter);

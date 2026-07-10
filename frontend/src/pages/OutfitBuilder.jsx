@@ -23,6 +23,9 @@ const IC = {
   copy:     'M8 17H5a2 2 0 01-2-2V5a2 2 0 012-2h8a2 2 0 012 2v3m-1 11h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
   shirt:    'M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.86H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.86l.58-3.57a2 2 0 00-1.34-2.23z',
   warn:     'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01',
+  sparkle:  'M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z',
+  calendar: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+  download: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3',
 };
 
 const CATEGORY_TABS = [
@@ -161,6 +164,53 @@ function computeScores(map) {
   const overall = Math.round(color * 0.30 + season * 0.20 + occ * 0.20 + comp * 0.30);
   return { color, season, occasion: occ, completeness: comp, overall };
 }
+// Layer -> which wardrobe categories qualify as a substitution candidate for
+// that layer (mirrors CATEGORY_TO_LAYER's mapping, keyed the other way).
+const LAYER_TO_CATEGORIES = {
+  tops: ['tops'], bottoms: ['bottoms'], dress: ['dresses'], outerwear: ['jackets'],
+  footwear: ['footwear'], accessories: ['accessories'], traditional: ['traditional', 'traditional wear'],
+};
+
+// Real substitution suggestions — not generic tips. For each filled layer,
+// tries swapping in every other wardrobe item of the same category (in
+// place of that layer's last-added item) and keeps whichever swap improves
+// the overall score the most, reusing computeScores exactly as-is rather
+// than inventing a second scoring system.
+function computeSubstitutionSuggestions(map, allItems) {
+  const baseScores = computeScores(map);
+  if (!baseScores || !allItems?.length) return [];
+
+  const suggestions = [];
+  for (const [layer, selected] of Object.entries(map)) {
+    if (!selected.length) continue;
+    const categories = LAYER_TO_CATEGORIES[layer] || [];
+    const candidates = allItems.filter(i =>
+      categories.includes((i.category || '').toLowerCase()) &&
+      !selected.some(s => s._id === i._id)
+    );
+    if (!candidates.length) continue;
+
+    const targetItem = selected[selected.length - 1];
+    let best = null;
+    for (const candidate of candidates) {
+      const simulatedArr = [...selected.slice(0, -1), candidate];
+      const simulatedScores = computeScores({ ...map, [layer]: simulatedArr });
+      if (!simulatedScores) continue;
+      const delta = simulatedScores.overall - baseScores.overall;
+      if (delta > 0 && (!best || delta > best.delta)) {
+        best = { candidate, delta, newOverall: simulatedScores.overall };
+      }
+    }
+    if (best && best.delta >= 6) {
+      suggestions.push({
+        layer, currentItem: targetItem, suggestedItem: best.candidate,
+        delta: best.delta, newOverall: best.newOverall,
+      });
+    }
+  }
+  return suggestions.sort((a, b) => b.delta - a.delta).slice(0, 3);
+}
+
 function buildReasons(map, overall) {
   const s = computeScores(map);
   const r = [];
@@ -227,6 +277,21 @@ function InsightRow({ insight }) {
     <div className={`ob-insight ob-insight--${insight.type}`}>
       <span className="ob-insight-ic">{marks[insight.type]}</span>
       <span className="ob-insight-txt">{insight.text}</span>
+    </div>
+  );
+}
+
+function SuggestionRow({ suggestion, onApply }) {
+  const meta = LAYER_META[suggestion.layer] || {};
+  return (
+    <div className="ob-suggestion">
+      <div className="ob-suggestion-txt">
+        <span className="ob-suggestion-arrow">→</span>{' '}
+        Try <strong>{suggestion.suggestedItem.name}</strong> instead of {suggestion.currentItem.name}
+        {' — '}improves your {meta.label?.toLowerCase() || 'outfit'} score to <strong>{suggestion.newOverall}%</strong>
+        {' '}(+{suggestion.delta}).
+      </div>
+      <button className="ob-suggestion-apply" onClick={() => onApply(suggestion)}>Apply</button>
     </div>
   );
 }
@@ -640,7 +705,7 @@ function WardrobePanel({ items, map, onSelect, loading, activeTab, setActiveTab 
 }
 
 function StylePanel({
-  map, scores, insights,
+  map, scores, insights, suggestions, onApplySuggestion,
   name, setName, occasion, setOccasion, season, setSeason, notes, setNotes,
   onSave, onClear, onRemove, saving, editingId, nameErr, setNameErr,
 }) {
@@ -739,6 +804,14 @@ function StylePanel({
               {insights.map((ins, i) => <InsightRow key={i} insight={ins}/>)}
             </div>
           )}
+          {suggestions?.length > 0 && (
+            <div className="ob-suggestions">
+              <p className="ob-suggestions-hd"><Icon d={IC.sparkle} size={13}/> AI Styling Suggestions</p>
+              {suggestions.map((s, i) => (
+                <SuggestionRow key={i} suggestion={s} onApply={onApplySuggestion}/>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -795,7 +868,7 @@ function StylePanel({
   );
 }
 
-function SavedLooks({ combos, onEdit, onDelete, onDuplicate, onNew, loading }) {
+function SavedLooks({ combos, onEdit, onDelete, onDuplicate, onNew, onWearToday, onAddToCalendar, onDownload, loading }) {
   const [confirm, setConfirm] = useState(null);
   const sc = s => s >= 80 ? '#059669' : s >= 60 ? '#D97706' : '#0891B2';
 
@@ -853,16 +926,22 @@ function SavedLooks({ combos, onEdit, onDelete, onDuplicate, onNew, loading }) {
           return (
             <article key={combo._id} className="ob-look">
               <div className="ob-look-mosaic">
-                {imgs.length === 0 && (
-                  <div className="ob-look-mosaic-ph"><Icon d={IC.hanger} size={22}/></div>
-                )}
-                {imgs.map((item, idx) => (
-                  <div key={idx} className="ob-look-cell">
-                    <img src={item.imageUrl} alt={item.name} className="ob-look-img" loading="lazy"/>
-                  </div>
-                ))}
-                {total > 4 && (
-                  <span className="ob-look-more">+{total - 4}</span>
+                {combo.previewImage?.url ? (
+                  <img src={combo.previewImage.url} alt={combo.name || 'Outfit preview'} className="ob-look-preview" loading="lazy"/>
+                ) : (
+                  <>
+                    {imgs.length === 0 && (
+                      <div className="ob-look-mosaic-ph"><Icon d={IC.hanger} size={22}/></div>
+                    )}
+                    {imgs.map((item, idx) => (
+                      <div key={idx} className="ob-look-cell">
+                        <img src={item.imageUrl} alt={item.name} className="ob-look-img" loading="lazy"/>
+                      </div>
+                    ))}
+                    {total > 4 && (
+                      <span className="ob-look-more">+{total - 4}</span>
+                    )}
+                  </>
                 )}
                 {score > 0 && (
                   <div className="ob-look-score-badge" style={{ background: sc(score) }}>
@@ -892,11 +971,22 @@ function SavedLooks({ combos, onEdit, onDelete, onDuplicate, onNew, loading }) {
                 )}
                 {combo.notes && <p className="ob-look-notes">"{combo.notes}"</p>}
                 <div className="ob-look-acts">
+                  <button className="ob-look-btn" onClick={() => onWearToday(combo)}>
+                    <Icon d={IC.check} size={11}/> Wear Today
+                  </button>
+                  <button className="ob-look-btn" onClick={() => onAddToCalendar(combo)}>
+                    <Icon d={IC.calendar} size={11}/> Add to Calendar
+                  </button>
                   <button className="ob-look-btn" onClick={() => onEdit(combo)}>
                     <Icon d={IC.edit} size={11}/> Edit
                   </button>
                   <button className="ob-look-btn" onClick={() => onDuplicate(combo)}>
                     <Icon d={IC.copy} size={11}/> Duplicate
+                  </button>
+                  <button className="ob-look-btn" disabled={!combo.previewImage?.url}
+                          title={combo.previewImage?.url ? 'Download outfit image' : 'Preview image not ready yet'}
+                          onClick={() => onDownload(combo)}>
+                    <Icon d={IC.download} size={11}/> Download
                   </button>
                   <button className="ob-look-btn ob-look-btn--del"
                           onClick={() => setConfirm(combo)}>
@@ -932,8 +1022,16 @@ export default function OutfitBuilder() {
   const showToast = useCallback((msg, type = 'success') =>
     setToast({ msg, type, k: Date.now() }), []);
 
-  const scores   = useMemo(() => computeScores(map), [map]);
-  const insights = useMemo(() => getInsights(map, scores), [map, scores]);
+  const scores      = useMemo(() => computeScores(map), [map]);
+  const insights    = useMemo(() => getInsights(map, scores), [map, scores]);
+  const suggestions = useMemo(() => computeSubstitutionSuggestions(map, allItems), [map, allItems]);
+
+  const handleApplySuggestion = useCallback((suggestion) => {
+    setMap(prev => {
+      const arr = prev[suggestion.layer] || [];
+      return { ...prev, [suggestion.layer]: [...arr.slice(0, -1), suggestion.suggestedItem] };
+    });
+  }, []);
 
   /* Data fetching */
   const fetchItems = useCallback(async () => {
@@ -1016,6 +1114,12 @@ export default function OutfitBuilder() {
   /* Save / update */
   const handleSave = async () => {
     const items = flatItems(map);
+    const hasTop    = map.tops.length > 0 || map.dress.length > 0 || map.traditional.length > 0;
+    const hasBottom = map.bottoms.length > 0 || map.dress.length > 0 || map.traditional.length > 0;
+    if (!hasTop || !hasBottom) {
+      showToast('An outfit needs at least a top and bottom (or a dress/traditional piece).', 'error');
+      return;
+    }
     if (items.length < 2) {
       showToast('Select at least 2 pieces to save an outfit.', 'error');
       return;
@@ -1096,6 +1200,42 @@ export default function OutfitBuilder() {
     } catch { showToast('Could not delete outfit.', 'error'); }
   };
 
+  /* Wear Today — same "reuse" endpoint SavedOutfits.jsx already uses */
+  const handleWearToday = async combo => {
+    try {
+      const { data } = await api.post(`/wardrobe/outfits/${combo._id}/reuse`);
+      setSavedCombos(p => p.map(c => c._id === combo._id ? data.combination : c));
+      showToast('Marked as worn today!');
+    } catch { showToast('Could not update outfit.', 'error'); }
+  };
+
+  /* Add to Calendar — defaults to today; a full date picker is a separate,
+     larger addition than this request calls for. */
+  const handleAddToCalendar = async combo => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await api.post('/calendar', {
+        date: today, combo: combo._id, outfitName: combo.name, occasion: combo.occasion,
+      });
+      showToast('Added to today on your calendar.');
+    } catch { showToast('Could not add to calendar.', 'error'); }
+  };
+
+  /* Download Outfit Image — only enabled once the composite preview exists */
+  const handleDownload = async combo => {
+    if (!combo.previewImage?.url) return;
+    try {
+      const res = await fetch(combo.previewImage.url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(combo.name || 'outfit').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { showToast('Could not download image.', 'error'); }
+  };
+
   const handleJumpToTab = useCallback(tab => setActiveTab(tab), []);
 
   const selCount = flatItems(map).length;
@@ -1167,6 +1307,7 @@ export default function OutfitBuilder() {
 
           <StylePanel
             map={map} scores={scores} insights={insights}
+            suggestions={suggestions} onApplySuggestion={handleApplySuggestion}
             name={name} setName={setName}
             occasion={occasion} setOccasion={setOccasion}
             season={season} setSeason={setSeason}
@@ -1183,6 +1324,7 @@ export default function OutfitBuilder() {
           <SavedLooks
             combos={savedCombos} onEdit={handleEdit}
             onDelete={handleDelete} onDuplicate={handleDuplicate}
+            onWearToday={handleWearToday} onAddToCalendar={handleAddToCalendar} onDownload={handleDownload}
             onNew={() => setView('studio')} loading={loadingSaved}/>
         </div>
       )}

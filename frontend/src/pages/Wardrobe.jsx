@@ -39,6 +39,17 @@ const PATTERNS      = ['solid','striped','plaid','floral','geometric','abstract'
 const FITS           = ['fitted','regular','relaxed','oversized','cropped'];
 const SLEEVE_LENGTHS = ['sleeveless','short','3/4','long'];
 const STYLE_TAG_OPTS = ['minimalist','streetwear','smart_casual','korean','vintage','preppy','athleisure','romantic','edgy','boho','classic','grunge','cottagecore','y2k','modest_chic'];
+const NECKLINES  = ['crew','round','v_neck','polo_collar','shirt_collar','turtleneck','high_neck','square_neck','off_shoulder','boat_neck'];
+const GENDERS    = ['women','men','unisex'];
+const DETAIL_FLAGS = [
+  { key: 'hasHood',       label: 'Hood' },
+  { key: 'hasButtons',    label: 'Buttons' },
+  { key: 'hasZipper',     label: 'Zipper' },
+  { key: 'hasPockets',    label: 'Pockets' },
+  { key: 'hasLogo',       label: 'Logo' },
+  { key: 'hasBelt',       label: 'Belt' },
+  { key: 'isTransparent', label: 'Transparent' },
+];
 
 const CAT_META = {
   tops:        { label: 'Tops',        color: '#0D9488', icon: '👕' },
@@ -281,15 +292,29 @@ function ImageUploader({ existingUrl, onFileChange, uploadError }) {
   );
 }
 
+const EMPTY_DETAILS = { hasHood: false, hasButtons: false, hasZipper: false, hasPockets: false, hasLogo: false, hasBelt: false, isTransparent: false };
+
 const EMPTY_FORM = {
   name: '', category: '', color: '',
   occasion: '', season: '', notes: '', imageUrl: '', publicId: '',
   subcategory: '', pattern: '', fit: '', sleeveLength: '', materialGuess: '',
   styleTags: [], suitableSeasons: [], suitableOccasions: [], colorHex: [],
+  neckline: '', genderCategory: '', details: { ...EMPTY_DETAILS },
+  aiMeta: null,
 };
 
-function AiBadge() {
-  return <span className="wd-tag wd-tag--purple" style={{ marginLeft: 6, fontSize: 10 }}>✨ AI suggested</span>;
+function AiBadge({ confidence }) {
+  const pct = typeof confidence === 'number' ? Math.round(confidence * 100) : null;
+  const low = pct !== null && pct < 70;
+  return (
+    <span
+      className={`wd-tag ${low ? 'wd-tag--warn' : 'wd-tag--purple'}`}
+      style={{ marginLeft: 6, fontSize: 10 }}
+      title={low ? 'Low confidence — please verify this value' : undefined}
+    >
+      ✨ {pct !== null ? `${pct}%${low ? ' — verify' : ''}` : 'AI suggested'}
+    </span>
+  );
 }
 
 function ItemModal({ item, onClose, onSave }) {
@@ -312,6 +337,10 @@ function ItemModal({ item, onClose, onSave }) {
     suitableSeasons: item.suitableSeasons || [],
     suitableOccasions: item.suitableOccasions || [],
     colorHex:        item.colorHex        || [],
+    neckline:        item.neckline        || '',
+    genderCategory:  item.genderCategory  || '',
+    details:         { ...EMPTY_DETAILS, ...(item.details || {}) },
+    aiMeta:          item.aiMeta          || null,
   } : { ...EMPTY_FORM });
 
   const [uploadFile,  setUploadFile]  = useState(null);
@@ -338,6 +367,11 @@ function ItemModal({ item, onClose, onSave }) {
     setAiSuggested(prev => { if (!prev.has(k)) return prev; const next = new Set(prev); next.delete(k); return next; });
   };
 
+  const toggleDetail = (flag) => {
+    setForm(f => ({ ...f, details: { ...f.details, [flag]: !f.details?.[flag] } }));
+    setAiSuggested(prev => { if (!prev.has('details')) return prev; const next = new Set(prev); next.delete('details'); return next; });
+  };
+
   const fetchAiMeta = async (imageUrl, category) => {
     try {
       const { data } = await api.post('/wardrobe/analyze', { imageUrl, category });
@@ -360,6 +394,9 @@ function ItemModal({ item, onClose, onSave }) {
     formalityLevel:    meta.formalityLevel ?? f.formalityLevel,
     layeringLevel:     meta.layeringLevel || f.layeringLevel || '',
     accessoryCompatibility: meta.accessoryCompatibility?.length ? meta.accessoryCompatibility : (f.accessoryCompatibility || []),
+    neckline:          f.neckline         || meta.neckline         || '',
+    genderCategory:    f.genderCategory   || meta.genderCategory   || '',
+    details:           meta.details ? { ...EMPTY_DETAILS, ...meta.details } : (f.details || { ...EMPTY_DETAILS }),
     aiMeta:            meta.aiMeta,
   });
 
@@ -583,14 +620,14 @@ function ItemModal({ item, onClose, onSave }) {
 
             {/* Subcategory */}
             <div className="wd-field">
-              <label className="wd-label">Subcategory <span className="wd-opt">(optional)</span>{aiSuggested.has('subcategory') && <AiBadge />}</label>
+              <label className="wd-label">Subcategory <span className="wd-opt">(optional)</span>{aiSuggested.has('subcategory') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.subcategory} />}</label>
               <input className="wd-input" placeholder="e.g. Blouse, Ankle boots"
                 value={form.subcategory} onChange={e => set('subcategory', e.target.value)} />
             </div>
 
             {/* Pattern */}
             <div className="wd-field">
-              <label className="wd-label">Pattern <span className="wd-opt">(optional)</span>{aiSuggested.has('pattern') && <AiBadge />}</label>
+              <label className="wd-label">Pattern <span className="wd-opt">(optional)</span>{aiSuggested.has('pattern') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.pattern} />}</label>
               <select className="wd-select" value={form.pattern} onChange={e => set('pattern', e.target.value)}>
                 <option value="">Select pattern</option>
                 {PATTERNS.map(p => <option key={p} value={p}>{cap(p)}</option>)}
@@ -599,7 +636,7 @@ function ItemModal({ item, onClose, onSave }) {
 
             {/* Fit */}
             <div className="wd-field">
-              <label className="wd-label">Fit <span className="wd-opt">(optional)</span>{aiSuggested.has('fit') && <AiBadge />}</label>
+              <label className="wd-label">Fit <span className="wd-opt">(optional)</span>{aiSuggested.has('fit') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.fit} />}</label>
               <select className="wd-select" value={form.fit} onChange={e => set('fit', e.target.value)}>
                 <option value="">Select fit</option>
                 {FITS.map(f => <option key={f} value={f}>{cap(f)}</option>)}
@@ -608,7 +645,7 @@ function ItemModal({ item, onClose, onSave }) {
 
             {/* Sleeve length */}
             <div className="wd-field">
-              <label className="wd-label">Sleeve Length <span className="wd-opt">(optional)</span>{aiSuggested.has('sleeveLength') && <AiBadge />}</label>
+              <label className="wd-label">Sleeve Length <span className="wd-opt">(optional)</span>{aiSuggested.has('sleeveLength') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.sleeveLength} />}</label>
               <select className="wd-select" value={form.sleeveLength} onChange={e => set('sleeveLength', e.target.value)}>
                 <option value="">Select sleeve length</option>
                 {SLEEVE_LENGTHS.map(s => <option key={s} value={s}>{cap(s)}</option>)}
@@ -617,14 +654,14 @@ function ItemModal({ item, onClose, onSave }) {
 
             {/* Material guess */}
             <div className="wd-field">
-              <label className="wd-label">Material <span className="wd-opt">(optional)</span>{aiSuggested.has('materialGuess') && <AiBadge />}</label>
+              <label className="wd-label">Material <span className="wd-opt">(optional)</span>{aiSuggested.has('materialGuess') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.materialGuess} />}</label>
               <input className="wd-input" placeholder="e.g. Cotton, Denim, Chiffon"
                 value={form.materialGuess} onChange={e => set('materialGuess', e.target.value)} />
             </div>
 
             {/* Style tags */}
             <div className="wd-field wd-field--full">
-              <label className="wd-label">Style Tags <span className="wd-opt">(optional)</span>{aiSuggested.has('styleTags') && <AiBadge />}</label>
+              <label className="wd-label">Style Tags <span className="wd-opt">(optional)</span>{aiSuggested.has('styleTags') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.styleTags} />}</label>
               <div className="wd-chips">
                 {STYLE_TAG_OPTS.map(s => (
                   <button type="button" key={s}
@@ -636,7 +673,7 @@ function ItemModal({ item, onClose, onSave }) {
 
             {/* Suitable seasons */}
             <div className="wd-field wd-field--full">
-              <label className="wd-label">Suitable Seasons <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableSeasons') && <AiBadge />}</label>
+              <label className="wd-label">Suitable Seasons <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableSeasons') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.suitableSeasons} />}</label>
               <div className="wd-chips">
                 {['winter','spring','monsoon','autumn','all'].map(s => (
                   <button type="button" key={s}
@@ -648,12 +685,42 @@ function ItemModal({ item, onClose, onSave }) {
 
             {/* Suitable occasions */}
             <div className="wd-field wd-field--full">
-              <label className="wd-label">Suitable Occasions <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableOccasions') && <AiBadge />}</label>
+              <label className="wd-label">Suitable Occasions <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableOccasions') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.suitableOccasions} />}</label>
               <div className="wd-chips">
                 {OCCASIONS.map(o => (
                   <button type="button" key={o}
                     className={`wd-chip ${form.suitableOccasions.includes(o) ? 'wd-chip--on' : ''}`}
                     onClick={() => toggleChip('suitableOccasions', o)}>{cap(o)}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Neckline */}
+            <div className="wd-field">
+              <label className="wd-label">Neckline <span className="wd-opt">(optional)</span>{aiSuggested.has('neckline') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.neckline} />}</label>
+              <select className="wd-select" value={form.neckline} onChange={e => set('neckline', e.target.value)}>
+                <option value="">Select neckline</option>
+                {NECKLINES.map(n => <option key={n} value={n}>{cap(n)}</option>)}
+              </select>
+            </div>
+
+            {/* Gender category */}
+            <div className="wd-field">
+              <label className="wd-label">Gender <span className="wd-opt">(optional)</span>{aiSuggested.has('genderCategory') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.genderCategory} />}</label>
+              <select className="wd-select" value={form.genderCategory} onChange={e => set('genderCategory', e.target.value)}>
+                <option value="">Select gender</option>
+                {GENDERS.map(g => <option key={g} value={g}>{cap(g)}</option>)}
+              </select>
+            </div>
+
+            {/* Additional details */}
+            <div className="wd-field wd-field--full">
+              <label className="wd-label">Additional Details <span className="wd-opt">(optional)</span>{aiSuggested.has('details') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.details} />}</label>
+              <div className="wd-chips">
+                {DETAIL_FLAGS.map(({ key, label }) => (
+                  <button type="button" key={key}
+                    className={`wd-chip ${form.details?.[key] ? 'wd-chip--on' : ''}`}
+                    onClick={() => toggleDetail(key)}>{label}</button>
                 ))}
               </div>
             </div>

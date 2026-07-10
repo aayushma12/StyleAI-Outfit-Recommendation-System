@@ -547,6 +547,25 @@
 .ob-insight-ic  { font-size: 0.8rem; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
 .ob-insight-txt { flex: 1; }
 
+/* AI Styling Suggestions */
+.ob-suggestions    { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.ob-suggestions-hd { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; color: var(--clr-primary-700, #0F766E); margin-bottom: 2px; }
+.ob-suggestion      { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px; background: var(--clr-primary-50, #F0FDFA); font-size: 0.74rem; line-height: 1.45; color: var(--text-secondary, #374151); }
+.ob-suggestion-arrow { flex-shrink: 0; font-weight: 700; color: var(--clr-primary-600, #0D9488); }
+.ob-suggestion-txt  { flex: 1; }
+.ob-suggestion-apply {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--clr-primary-600, #0D9488);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.ob-suggestion-apply:hover { background: var(--clr-primary-700, #0F766E); }
+
 /* Save form */
 .ob-field    { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
 .ob-lbl      { font-size: 0.74rem; font-weight: 500; color: var(--text-secondary, #374151); }
@@ -646,6 +665,7 @@
 .ob-look-cell:nth-child(3) { border-right: 1px solid #fff; overflow: hidden; }
 .ob-look-cell:nth-child(4) { overflow: hidden; }
 .ob-look-img    { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ob-look-preview { grid-column: 1 / -1; grid-row: 1 / -1; width: 100%; height: 100%; object-fit: cover; display: block; }
 .ob-look-more   {
   position: absolute; bottom: 6px; right: 8px;
   font-size: 0.68rem; font-weight: 700; color: #fff;
@@ -680,6 +700,8 @@
 }
 .ob-look-btn:hover     { background: var(--bg-main, #F3F4F6); border-color: var(--border-default); }
 .ob-look-btn--del:hover { background: #FEF2F2; border-color: #FECACA; color: #EF4444; }
+.ob-look-btn:disabled  { opacity: 0.45; cursor: not-allowed; }
+.ob-look-btn:disabled:hover { background: none; border-color: var(--border, #E5E7EB); }
 
 .ob-looks-zero {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

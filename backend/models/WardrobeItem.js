@@ -57,6 +57,25 @@ const wardrobeItemSchema = new mongoose.Schema({
   }],
   accessoryCompatibility: [{ type: String, trim: true }], // slot names this item pairs well with
   materialGuess: { type: String, trim: true, maxlength: 60, default: '' }, // AI guess, distinct from user-entered `material`
+  neckline: {
+    type: String, trim: true,
+    enum: ['crew', 'round', 'v_neck', 'polo_collar', 'shirt_collar', 'turtleneck', 'high_neck', 'square_neck', 'off_shoulder', 'boat_neck', ''],
+    default: '',
+  },
+  genderCategory: {
+    type: String, trim: true,
+    enum: ['women', 'men', 'unisex', ''],
+    default: '',
+  },
+  details: {
+    hasHood:       { type: Boolean, default: false },
+    hasButtons:    { type: Boolean, default: false },
+    hasZipper:     { type: Boolean, default: false },
+    hasPockets:    { type: Boolean, default: false },
+    hasLogo:       { type: Boolean, default: false },
+    hasBelt:       { type: Boolean, default: false },
+    isTransparent: { type: Boolean, default: false },
+  },
 
   aiMeta: {
     extractedAt: { type: Date, default: null },

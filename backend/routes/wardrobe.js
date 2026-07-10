@@ -51,9 +51,10 @@ const validateAnalyzeBody = [
 ];
 
 // Wardrobe items
-router.post('/analyze', protect, validateAnalyzeBody, ctrl.analyzeImage);
-router.get('/stats',    protect, ctrl.getStats);
-router.get('/',         protect, ctrl.getItems);
+router.post('/analyze',        protect, validateAnalyzeBody, ctrl.analyzeImage);
+router.get('/stats',           protect, ctrl.getStats);
+router.get('/outfit-preview',  protect, ctrl.getOutfitPreview);
+router.get('/',                protect, ctrl.getItems);
 router.get('/:id',      protect, checkId, ctrl.getItem);
 router.post('/',        protect, validateItemCreateBody, ctrl.createItem);
 router.put('/:id',      protect, checkId, validateItemUpdateBody, ctrl.updateItem);

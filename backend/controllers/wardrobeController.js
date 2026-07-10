@@ -4,12 +4,14 @@ const WardrobeCombo = require('../models/WardrobeCombo');
 const logActivity   = require('../utils/historyLogger');
 const { logBehavior } = require('../services/behaviorService');
 const visionExtraction = require('../services/visionExtractionService');
+const outfitPreview = require('../services/outfitPreviewService');
 const { escapeRegex } = require('../utils/validation');
 const { isAllowedImageUrl } = require('../utils/urlSafety');
 
 const AI_METADATA_FIELDS = [
-  'subcategory', 'colorHex', 'fit', 'formalityLevel', 'layeringLevel', 'sleeveLength',
+  'subcategory', 'colorHex', 'pattern', 'fit', 'formalityLevel', 'layeringLevel', 'sleeveLength',
   'suitableSeasons', 'suitableOccasions', 'styleTags', 'accessoryCompatibility', 'materialGuess',
+  'neckline', 'genderCategory', 'details',
 ];
 
 exports.getItems = async (req, res) => {
@@ -222,6 +224,23 @@ exports.getStats = async (req, res) => {
   });
 };
 
+// Ad-hoc composite preview for items that aren't (yet) a saved combo — used
+// by Alternative Styles cards to generate a preview only when a user
+// actually expands one, rather than eagerly for every candidate shown.
+// Never creates a WardrobeCombo; purely returns an image URL or null.
+exports.getOutfitPreview = async (req, res) => {
+  const ids = (req.query.items || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);
+  if (!ids.length) return res.json({ url: null });
+
+  const items = await WardrobeItem.find(
+    { _id: { $in: ids }, user: req.user._id },
+    'imageUrl'
+  ).lean();
+
+  const preview = await outfitPreview.generatePreviewImage(items.map(i => i.imageUrl));
+  res.json({ url: preview?.url || null });
+};
+
 // A combo's `items` array can hold a stale ObjectId for a wardrobe item that
 // was later deleted — .populate() turns that slot into `null` in place
 // (array length unchanged) rather than dropping it. deleteItem() now cleans
@@ -263,6 +282,17 @@ exports.saveCombination = async (req, res) => {
     entityId: combo._id, entityType: 'WardrobeCombo',
     metadata: { occasion, score: matchScore },
   });
+
+  // Fire-and-forget — the save response must stay instant; the composite
+  // preview patches onto the record moments later (see outfitPreviewService.js).
+  const itemImageUrls = (populated.items || []).filter(Boolean).map(i => i.imageUrl);
+  outfitPreview.generatePreviewImage(itemImageUrls).then(preview => {
+    if (preview) {
+      WardrobeCombo.findByIdAndUpdate(combo._id, {
+        previewImage: { ...preview, generatedAt: new Date() },
+      }).catch(() => {});
+    }
+  }).catch(() => {});
 
   res.status(201).json({ combination: stripDeadRefs(populated) });
 };

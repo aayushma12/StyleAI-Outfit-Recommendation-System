@@ -10,6 +10,20 @@
   overflow: hidden;
 }
 
+.rp-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 28px;
+  background: var(--text-primary);
+  color: var(--bg-base);
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  z-index: 2000;
+  animation: rp-toast-in 0.2s ease;
+}
+@keyframes rp-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
 /* Panel header */
 .rp-panel-hd {
   display: flex;

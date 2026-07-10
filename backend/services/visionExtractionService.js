@@ -24,6 +24,8 @@ const VALID_OCCASIONS  = ['daily', 'college', 'home', 'travel', 'gym', 'cafe', '
   'party', 'office', 'formal', 'festival', 'wedding', 'pooja', 'trekking', 'interview', 'birthday',
   'traditional_ceremony', 'graduation', 'family_gathering'];
 const VALID_ACCESSORY_SLOTS = ['jewelry', 'bag', 'belt', 'watch', 'scarf', 'sunglasses', 'hair_accessory', 'footwear', 'outerwear'];
+const VALID_NECKLINES  = ['crew', 'round', 'v_neck', 'polo_collar', 'shirt_collar', 'turtleneck', 'high_neck', 'square_neck', 'off_shoulder', 'boat_neck'];
+const VALID_GENDERS    = ['women', 'men', 'unisex'];
 
 const SYSTEM_PROMPT = `You are a professional fashion cataloguer analyzing a single clothing item photo for a Kathmandu-based women's fashion app. Respond with ONLY a single JSON object — no prose, no markdown fences.`;
 
@@ -42,6 +44,9 @@ function buildImagePrompt(category) {
   "formalityLevel": integer 0-4 (0=loungewear, 1=casual, 2=smart casual, 3=business/festive, 4=formal/black-tie),
   "layeringLevel": one of [${VALID_LAYERING.join(', ')}],
   "accessoryCompatibility": array from [${VALID_ACCESSORY_SLOTS.join(', ')}] naming slots this item pairs well with,
+  "neckline": one of [${VALID_NECKLINES.join(', ')}] or null if not applicable (e.g. bottoms, shoes, bags),
+  "genderCategory": one of [${VALID_GENDERS.join(', ')}],
+  "details": { "hasHood": boolean, "hasButtons": boolean, "hasZipper": boolean, "hasPockets": boolean, "hasLogo": boolean, "hasBelt": boolean, "isTransparent": boolean },
   "confidence": { "<fieldName>": 0.0-1.0 for each field above, your self-rated certainty }
 }`;
 }
@@ -75,6 +80,8 @@ exports.analyzeWardrobeImage = async function analyzeWardrobeImage(imageUrl, cat
     colorHex: [], colorNames: [], subcategory: '', pattern: '', sleeveLength: '', fit: '',
     materialGuess: '', styleTags: [], suitableSeasons: [], suitableOccasions: [],
     formalityLevel: null, layeringLevel: '', accessoryCompatibility: [],
+    neckline: '', genderCategory: '',
+    details: { hasHood: false, hasButtons: false, hasZipper: false, hasPockets: false, hasLogo: false, hasBelt: false, isTransparent: false },
     unverifiedFields: [], aiMeta: { extractedAt: new Date(), provider: '', fieldConfidence: {}, visionAvailable: false },
   };
 
@@ -131,6 +138,17 @@ exports.analyzeWardrobeImage = async function analyzeWardrobeImage(imageUrl, cat
     formalityLevel:         Number.isInteger(parsed.formalityLevel) ? Math.max(0, Math.min(4, parsed.formalityLevel)) : null,
     layeringLevel:          sanitizeEnum(parsed.layeringLevel, VALID_LAYERING),
     accessoryCompatibility: sanitizeEnumArray(parsed.accessoryCompatibility, VALID_ACCESSORY_SLOTS),
+    neckline:               sanitizeEnum(parsed.neckline, VALID_NECKLINES),
+    genderCategory:         sanitizeEnum(parsed.genderCategory, VALID_GENDERS),
+    details: {
+      hasHood:       !!parsed.details?.hasHood,
+      hasButtons:    !!parsed.details?.hasButtons,
+      hasZipper:     !!parsed.details?.hasZipper,
+      hasPockets:    !!parsed.details?.hasPockets,
+      hasLogo:       !!parsed.details?.hasLogo,
+      hasBelt:       !!parsed.details?.hasBelt,
+      isTransparent: !!parsed.details?.isTransparent,
+    },
   };
 
   const unverified = Object.entries(fields)

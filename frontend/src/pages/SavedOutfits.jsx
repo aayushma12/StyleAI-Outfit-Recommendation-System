@@ -83,7 +83,7 @@ function OutfitDetailModal({ combo, onClose, onDelete }) {
             {(combo.items || []).filter(Boolean).map(item => (
               <div key={item._id} className="so-item-chip">
                 {item.imageUrl
-                  ? <img src={item.imageUrl} alt={item.name} className="so-item-img" />
+                  ? <img src={item.imageUrl} alt={item.name} className="so-item-img" loading="lazy" />
                   : <div className="so-item-ph"><Ic d={I.hanger} size={18} /></div>}
                 <div className="so-item-info">
                   <div className="so-item-name">{item.name}</div>
@@ -265,15 +265,21 @@ export default function SavedOutfits() {
             return (
               <div key={combo._id} className="so-card">
                 <div className="so-card-imgs">
-                  {(combo.items || []).filter(Boolean).slice(0, 4).map((item, i) => (
-                    <div key={item._id || i} className="so-card-img-slot">
-                      {item.imageUrl
-                        ? <img src={item.imageUrl} alt={item.name} />
-                        : <div className="so-card-img-ph"><Ic d={I.hanger} size={20} /></div>}
-                    </div>
-                  ))}
-                  {(combo.items || []).filter(Boolean).length === 0 && (
-                    <div className="so-card-img-ph"><Ic d={I.layers} size={28} /></div>
+                  {combo.previewImage?.url ? (
+                    <img className="so-card-preview" src={combo.previewImage.url} alt={combo.name || 'Outfit preview'} loading="lazy" />
+                  ) : (
+                    <>
+                      {(combo.items || []).filter(Boolean).slice(0, 4).map((item, i) => (
+                        <div key={item._id || i} className="so-card-img-slot">
+                          {item.imageUrl
+                            ? <img src={item.imageUrl} alt={item.name} loading="lazy" />
+                            : <div className="so-card-img-ph"><Ic d={I.hanger} size={20} /></div>}
+                        </div>
+                      ))}
+                      {(combo.items || []).filter(Boolean).length === 0 && (
+                        <div className="so-card-img-ph"><Ic d={I.layers} size={28} /></div>
+                      )}
+                    </>
                   )}
                   {match && (
                     <div className="so-card-badge" style={{ background: match.bg, color: match.color, border: `1.5px solid ${match.border}` }}>

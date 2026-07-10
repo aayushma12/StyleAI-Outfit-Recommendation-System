@@ -36,6 +36,12 @@ const SLOT_EMOJI = {
   belt: '🎀', watch: '⌚', scarf: '🧣', sunglasses: '🕶️', hair_accessory: '📌',
 };
 
+const LAYER_LABEL = {
+  top: 'Top', bottom: 'Bottom', dress: 'Dress', outerwear: 'Outerwear',
+  footwear: 'Footwear', accessory: 'Accessory', jewelry: 'Jewelry', bag: 'Bag',
+  belt: 'Belt', watch: 'Watch', scarf: 'Scarf', sunglasses: 'Sunglasses', hair_accessory: 'Hair Accessory',
+};
+
 function DailyCardSkeleton() {
   return (
     <div className="doc-root doc-root--loading">
@@ -60,14 +66,56 @@ function DailyCardSkeleton() {
 }
 
 export default function DailyOutfitCard({ userName, onNavigate }) {
-  const [state,    setState]    = useState('idle');
-  const [session,  setSession]  = useState(null);
-  const [calEvent, setCalEvent] = useState(null);
-  const [feedback, setFeedback] = useState({});
-  const [expanded, setExpanded] = useState(false);
+  const [state,         setState]         = useState('idle');
+  const [session,       setSession]       = useState(null);
+  const [calEvent,      setCalEvent]      = useState(null);
+  const [feedback,      setFeedback]      = useState({});
+  const [altFeedback,   setAltFeedback]   = useState({});
+  const [expanded,      setExpanded]      = useState(false);
+  const [toast,         setToast]         = useState('');
+  const [focusCategory, setFocusCategory] = useState(null);
+  const [expandedAlt,   setExpandedAlt]   = useState(null);
+  const [altPreviews,   setAltPreviews]   = useState({});
 
-  const bestMatch = session?.recommendations?.find(r => r.category === 'best_match')
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+  // "Try This Look" swaps which category is treated as the hero, purely
+  // client-side — no regeneration, no save. Resets whenever a fresh session
+  // loads (new day / regenerate) so it always starts on the actual daily pick.
+  const bestMatch = (focusCategory && session?.recommendations?.find(r => r.category === focusCategory))
+    || session?.recommendations?.find(r => r.category === 'best_match')
     || session?.recommendations?.[0];
+
+  // The daily session already scores 5 categories (best_match, most_stylish,
+  // most_comfortable, weather_optimized, wardrobe_champion) — the other 4
+  // are shown here as "Alternative Styles" instead of being discarded.
+  const alternates = (session?.recommendations || []).filter(r => r.category !== bestMatch?.category);
+
+  const tryThisLook = (rec) => {
+    setFocusCategory(rec.category);
+    setExpandedAlt(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const toggleAltDetails = async (rec) => {
+    const opening = expandedAlt !== rec.category;
+    setExpandedAlt(opening ? rec.category : null);
+    if (!opening || altPreviews[rec.category] !== undefined) return;
+
+    const itemIds = Object.values(rec.outfit || {})
+      .map(slot => slot?.item?._id || slot?.item)
+      .filter(Boolean);
+    if (!itemIds.length) {
+      setAltPreviews(p => ({ ...p, [rec.category]: null }));
+      return;
+    }
+    try {
+      const { data } = await api.get('/wardrobe/outfit-preview', { params: { items: itemIds.join(',') } });
+      setAltPreviews(p => ({ ...p, [rec.category]: data.url || null }));
+    } catch {
+      setAltPreviews(p => ({ ...p, [rec.category]: null }));
+    }
+  };
 
   const load = useCallback(async () => {
     setState('loading');
@@ -84,6 +132,9 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
   const regenerate = useCallback(async () => {
     setState('loading');
     setFeedback({});
+    setFocusCategory(null);
+    setExpandedAlt(null);
+    setAltPreviews({});
     try {
       const { data } = await api.post('/recommendations/daily/regenerate');
       setSession(data.session);
@@ -104,6 +155,16 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
         category: bestMatch.category,
         status,
       });
+      if (status === 'saved') showToast('Outfit saved! ✓');
+    } catch { /* non-critical */ }
+  };
+
+  const sendAltFeedback = async (rec, status) => {
+    if (!session?._id) return;
+    setAltFeedback(f => ({ ...f, [rec.category]: status }));
+    try {
+      await api.post(`/recommendations/${session._id}/feedback`, { category: rec.category, status });
+      if (status === 'saved') showToast('Outfit saved! ✓');
     } catch { /* non-critical */ }
   };
 
@@ -169,6 +230,8 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
 
   return (
     <div className={`doc-root${isDone ? ' doc-root--done' : ''}`}>
+
+      {toast && <div className="doc-toast">{toast}</div>}
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="doc-header">
@@ -350,6 +413,112 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
           <button className="doc-action doc-action--skip" onClick={() => sendFeedback('disliked')}>
             <Ic d={I.x} size={14} /> Not today
           </button>
+        </div>
+      )}
+
+      {/* ── Alternative styles — the other 4 scored categories from today's
+             same session, not new suggestions ─────────────────────────── */}
+      {alternates.length > 0 && (
+        <div className="doc-alt-section">
+          <div className="doc-section-label">Alternative Styles</div>
+          <div className="doc-alt-grid">
+            {alternates.map(rec => {
+              const altMatch    = getMatchBadge(rec.confidence);
+              const altStatus   = altFeedback[rec.category] || rec.status || 'pending';
+              const altDone     = ['worn', 'liked', 'saved', 'disliked', 'skipped'].includes(altStatus);
+              const altOutfit   = rec.outfit || {};
+              const altSlots    = [...PRIMARY_SLOTS, ...ACCENT_SLOTS]
+                .map(slot => ({ slot, data: altOutfit[slot] }))
+                .filter(({ data }) => data && (data.name || data.suggestion));
+              const altColors   = altSlots.map(({ data }) => data.item?.color).filter(Boolean);
+              const isTrending  = (rec.scores?.trendScore ?? 0) >= 70;
+              const isExpanded  = expandedAlt === rec.category;
+              const previewUrl  = altPreviews[rec.category];
+
+              return (
+                <div key={rec.category} className={`doc-alt-card${altDone ? ' doc-alt-card--done' : ''}`}>
+                  <div className="doc-alt-head">
+                    <span className="doc-alt-emoji">{rec.categoryEmoji || '✨'}</span>
+                    <span className="doc-alt-label">{rec.categoryLabel || rec.category}</span>
+                    {isTrending && <span className="doc-alt-trending">🔥 Trending</span>}
+                    <span className="doc-alt-badge" style={{ background: altMatch.bg, color: altMatch.color }}>
+                      {altMatch.text}
+                    </span>
+                  </div>
+
+                  {altSlots.length > 0 && (
+                    <div className="doc-alt-thumbs">
+                      {altSlots.slice(0, 4).map(({ slot, data }) => (
+                        <div key={slot} className="doc-alt-thumb">
+                          {data.item?.imageUrl
+                            ? <img src={data.item.imageUrl} alt={data.name} loading="lazy" />
+                            : <span className="doc-alt-thumb-ph">{SLOT_EMOJI[slot] || '✨'}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="doc-alt-name">{rec.outfitName}</div>
+
+                  <div className="doc-alt-pills">
+                    {season && <span className="doc-alt-pill">🍁 {season.split('(')[0].trim()}</span>}
+                    {session.context?.occasion && <span className="doc-alt-pill">{session.context.occasion}</span>}
+                  </div>
+
+                  {altColors.length > 0 && (
+                    <div className="doc-alt-palette">
+                      {altColors.slice(0, 5).map((c, i) => (
+                        <span key={i} className="doc-alt-dot" style={{ background: c }} title={c} />
+                      ))}
+                    </div>
+                  )}
+
+                  {rec.explanation?.summary && (
+                    <p className="doc-alt-explain">{rec.explanation.summary}</p>
+                  )}
+
+                  <button className="doc-alt-details-toggle" onClick={() => toggleAltDetails(rec)}>
+                    <Ic d={isExpanded ? I.chevUp : I.chev} size={12} /> View Details
+                  </button>
+
+                  {isExpanded && (
+                    <div className="doc-alt-detail">
+                      {previewUrl === undefined ? (
+                        <div className="doc-alt-detail-loading">Generating preview…</div>
+                      ) : previewUrl ? (
+                        <img className="doc-alt-preview-img" src={previewUrl} alt={rec.outfitName} loading="lazy" />
+                      ) : null}
+                      <ul className="doc-alt-detail-list">
+                        {altSlots.map(({ slot, data }) => (
+                          <li key={slot}>
+                            <span className="doc-alt-detail-slot">{SLOT_EMOJI[slot] || '✨'} {LAYER_LABEL[slot] || slot}:</span> {data.name || data.suggestion}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {altDone ? (
+                    <div className={`doc-alt-status doc-alt-status--${altStatus}`}>
+                      {altStatus === 'disliked' || altStatus === 'skipped' ? 'Skipped' : 'Saved for later'}
+                    </div>
+                  ) : (
+                    <div className="doc-alt-actions">
+                      <button className="doc-alt-try-btn" onClick={() => tryThisLook(rec)}>
+                        Try This Look
+                      </button>
+                      <button className="doc-alt-btn" title="Save" onClick={() => sendAltFeedback(rec, 'saved')}>
+                        <Ic d={I.heart} size={13} />
+                      </button>
+                      <button className="doc-alt-btn" title="Not for me" onClick={() => sendAltFeedback(rec, 'disliked')}>
+                        <Ic d={I.x} size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

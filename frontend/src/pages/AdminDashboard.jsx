@@ -1657,39 +1657,48 @@ function SettingsAdminTab({ toast }) {
   if (loading) return <Spinner />;
 
   return (
-    <div style={{ maxWidth:520 }}>
-      <div className="ad-settings-card">
-        <h3 className="ad-settings-title">Administrator Profile</h3>
-        <form onSubmit={saveProfile}>
-          <Inp label="Name" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} />
-          <Inp label="Email" type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} />
-          <Btn disabled={saving}>{saving ? 'Saving…' : 'Update Profile'}</Btn>
-        </form>
-      </div>
-
-      <div className="ad-settings-card">
-        <h3 className="ad-settings-title">Change Password</h3>
-        <form onSubmit={savePassword}>
-          <Inp label="Current Password" type="password" value={passwords.currentPassword} onChange={e => setPasswords(p => ({ ...p, currentPassword: e.target.value }))} />
-          <Inp label="New Password" type="password" value={passwords.newPassword} onChange={e => setPasswords(p => ({ ...p, newPassword: e.target.value }))} placeholder="8+ chars, uppercase, number, symbol" />
-          <Inp label="Confirm New Password" type="password" value={passwords.confirmPassword} onChange={e => setPasswords(p => ({ ...p, confirmPassword: e.target.value }))} />
-          <Btn disabled={savingPw}>{savingPw ? 'Changing…' : 'Change Password'}</Btn>
-        </form>
-      </div>
-
-      <div className="ad-settings-card">
-        <h3 className="ad-settings-title">Data Exports</h3>
-        <p style={{ fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:16, marginTop:0 }}>Download system data as CSV for analysis or backup.</p>
-        <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-          <Btn variant="outline" onClick={() => window.open('/api/admin/reports/users', '_blank')}>
-            <Ic d={IC.download} size={14} /> Export Users CSV
-          </Btn>
-          <Btn variant="outline" onClick={() => window.open('/api/admin/reports/recommendations', '_blank')}>
-            <Ic d={IC.download} size={14} /> Export Recs CSV
-          </Btn>
+    <>
+      <div className="ad-page-hd">
+        <div>
+          <h3 className="ad-page-title">Settings</h3>
+          <p className="ad-page-sub">Manage your administrator account and export system data.</p>
         </div>
       </div>
-    </div>
+
+      <div className="ad-settings-grid">
+        <div className="ad-settings-card">
+          <h3 className="ad-settings-title"><Ic d={IC.user} size={15} /> Administrator Profile</h3>
+          <form onSubmit={saveProfile}>
+            <Inp label="Name" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} />
+            <Inp label="Email" type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} />
+            <Btn disabled={saving}>{saving ? 'Saving…' : 'Update Profile'}</Btn>
+          </form>
+        </div>
+
+        <div className="ad-settings-card">
+          <h3 className="ad-settings-title"><Ic d={IC.lock} size={15} /> Change Password</h3>
+          <form onSubmit={savePassword}>
+            <Inp label="Current Password" type="password" value={passwords.currentPassword} onChange={e => setPasswords(p => ({ ...p, currentPassword: e.target.value }))} />
+            <Inp label="New Password" type="password" value={passwords.newPassword} onChange={e => setPasswords(p => ({ ...p, newPassword: e.target.value }))} placeholder="8+ chars, uppercase, number, symbol" />
+            <Inp label="Confirm New Password" type="password" value={passwords.confirmPassword} onChange={e => setPasswords(p => ({ ...p, confirmPassword: e.target.value }))} />
+            <Btn disabled={savingPw}>{savingPw ? 'Changing…' : 'Change Password'}</Btn>
+          </form>
+        </div>
+
+        <div className="ad-settings-card ad-settings-card-wide">
+          <h3 className="ad-settings-title"><Ic d={IC.download} size={15} /> Data Exports</h3>
+          <p className="ad-settings-hint">Download system data as CSV for analysis or backup.</p>
+          <div className="ad-settings-actions">
+            <Btn variant="outline" onClick={() => window.open('/api/admin/reports/users', '_blank')}>
+              <Ic d={IC.download} size={14} /> Export Users CSV
+            </Btn>
+            <Btn variant="outline" onClick={() => window.open('/api/admin/reports/recommendations', '_blank')}>
+              <Ic d={IC.download} size={14} /> Export Recs CSV
+            </Btn>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
