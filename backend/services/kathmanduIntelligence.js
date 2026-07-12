@@ -314,7 +314,7 @@ exports.getVenueContext = function(occasion) {
 };
 
 exports.requiresTraditionalConsideration = function(occasion) {
-  const traditional = ['festival', 'wedding', 'pooja', 'dashain', 'tihar', 'teej', 'festival'];
+  const traditional = ['festival', 'wedding', 'pooja', 'dashain', 'tihar', 'teej', 'traditional'];
   return traditional.some(t => (occasion || '').toLowerCase().includes(t));
 };
 
@@ -432,7 +432,7 @@ exports.getPredictiveContext = function(weather) {
 };
 
 exports.requiresTraditionalConsideration = function(occasion) {
-  const traditional = ['festival', 'wedding', 'pooja', 'dashain', 'tihar', 'teej', 'festival'];
+  const traditional = ['festival', 'wedding', 'pooja', 'dashain', 'tihar', 'teej', 'traditional'];
   return traditional.some(t => (occasion || '').toLowerCase().includes(t));
 };
 

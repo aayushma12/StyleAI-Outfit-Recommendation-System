@@ -1,7 +1,9 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { OCCASIONS, OCCASION_LABELS } from '../constants/occasions';
 import './AdminDashboard.css';
 
 // ── SVG icon helper ───────────────────────────────────────────────────────────
@@ -775,7 +777,7 @@ function ModerationTab({ toast }) {
 
 // ── OUTFIT CATALOG TAB ────────────────────────────────────────────────────────
 const CATALOG_CATEGORIES = ['tops', 'bottoms', 'dresses', 'outerwear', 'footwear', 'accessories', 'traditional', 'full_outfit'];
-const blankOutfit = () => ({ name:'', description:'', category:'tops', style:'', occasion:'', season:'', colors:'', fabric:'', brand:'', price:'', imageUrl:'', tags:'', isActive:true });
+const blankOutfit = () => ({ name:'', description:'', category:'tops', style:'', occasion:[], season:'', colors:'', fabric:'', brand:'', price:'', imageUrl:'', publicId:'', imageVerified:false, tags:'', isActive:true });
 
 function CatalogTab({ toast }) {
   const [outfits,    setOutfits]    = useState([]);
@@ -789,6 +791,9 @@ function CatalogTab({ toast }) {
   const [form,       setForm]       = useState(blankOutfit());
   const [saving,     setSaving]     = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
+  const [uploading,  setUploading]  = useState(false);
+  const [uploadPct,  setUploadPct]  = useState(0);
+  const [uploadError, setUploadError] = useState('');
 
   const load = useCallback(async (p = 1) => {
     setLoading(true);
@@ -802,6 +807,50 @@ function CatalogTab({ toast }) {
   useEffect(() => { load(1); }, [search, catF]);
 
   const toArr = s => s.split(',').map(x => x.trim()).filter(Boolean);
+  const toggleOccasion = val => setForm(p => ({
+    ...p, occasion: p.occasion.includes(val) ? p.occasion.filter(x => x !== val) : [...p.occasion, val],
+  }));
+
+  // Real upload, same unsigned-preset Cloudinary flow as wardrobe photos
+  // (Wardrobe.jsx) — a human picking and uploading this exact photo for this
+  // exact catalog entry is what makes imageVerified trustworthy.
+  const handleUpload = async file => {
+    if (!file) return;
+    setUploading(true);
+    setUploadPct(0);
+    setUploadError('');
+
+    const cloudName    = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset  = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
+    if (!cloudName || !uploadPreset) {
+      setUploadError('Image upload is not configured. Please contact the administrator.');
+      setUploading(false);
+      return;
+    }
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', uploadPreset);
+      fd.append('folder', 'styleai/catalog');
+
+      const { data } = await axios.post(
+        `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+        fd,
+        { onUploadProgress: e => setUploadPct(Math.round((e.loaded * 100) / (e.total || 1))) }
+      );
+
+      setForm(p => ({ ...p, imageUrl: data.secure_url, publicId: data.public_id || '', imageVerified: true }));
+    } catch (err) {
+      const cloudMsg = err.response?.data?.error?.message || '';
+      const isPreset = cloudMsg.toLowerCase().includes('preset');
+      setUploadError(isPreset
+        ? `Upload preset "${uploadPreset}" not found. Create it as an unsigned preset on Cloudinary.`
+        : 'Image upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const save = async () => {
     if (!form.name || !form.category) return toast('Name and category are required.', 'error');
@@ -810,7 +859,6 @@ function CatalogTab({ toast }) {
       const payload = {
         ...form,
         style:    toArr(form.style),
-        occasion: toArr(form.occasion),
         season:   toArr(form.season),
         colors:   toArr(form.colors),
         tags:     toArr(form.tags),
@@ -887,7 +935,7 @@ function CatalogTab({ toast }) {
               <div className="ad-list-card-btns">
                 {!o.isApproved && <Btn size="sm" variant="success" onClick={() => approve(o._id)}>Approve</Btn>}
                 <Btn size="sm" variant="outline" onClick={() => {
-                  setForm({ ...o, style:(o.style||[]).join(', '), occasion:(o.occasion||[]).join(', '), season:(o.season||[]).join(', '), colors:(o.colors||[]).join(', '), tags:(o.tags||[]).join(', '), price: o.price ?? '' });
+                  setForm({ ...o, style:(o.style||[]).join(', '), occasion: o.occasion || [], season:(o.season||[]).join(', '), colors:(o.colors||[]).join(', '), tags:(o.tags||[]).join(', '), price: o.price ?? '' });
                   setModal('edit');
                 }}><Ic d={IC.edit} size={12} /> Edit</Btn>
                 <Btn size="sm" variant="danger" onClick={() => setConfirmDel(o)}><Ic d={IC.trash} size={12} /></Btn>
@@ -905,7 +953,15 @@ function CatalogTab({ toast }) {
             {CATALOG_CATEGORIES.map(c => <option key={c} value={c}>{c.replace('_',' ')}</option>)}
           </Sel>
           <Inp label="Style (comma-separated)" value={form.style} onChange={e => setForm(p => ({ ...p, style: e.target.value }))} placeholder="minimalist, korean" />
-          <Inp label="Occasion (comma-separated)" value={form.occasion} onChange={e => setForm(p => ({ ...p, occasion: e.target.value }))} placeholder="office, daily" />
+          <div className="ad-field">
+            <label className="ad-field-label">Occasion</label>
+            <div className="ad-chips">
+              {OCCASIONS.map(o => (
+                <button key={o} type="button" onClick={() => toggleOccasion(o)}
+                  className={`ad-chip${form.occasion.includes(o) ? ' sel' : ''}`}>{OCCASION_LABELS[o]}</button>
+              ))}
+            </div>
+          </div>
           <Inp label="Season (comma-separated)" value={form.season} onChange={e => setForm(p => ({ ...p, season: e.target.value }))} placeholder="monsoon, autumn" />
           <Inp label="Colors (comma-separated)" value={form.colors} onChange={e => setForm(p => ({ ...p, colors: e.target.value }))} placeholder="black, white" />
           <div className="ad-form-2">
@@ -919,7 +975,32 @@ function CatalogTab({ toast }) {
               <label htmlFor="cat-active" style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--text-secondary)', cursor:'pointer' }}>Active</label>
             </div>
           </div>
-          <Inp label="Image URL" value={form.imageUrl} onChange={e => setForm(p => ({ ...p, imageUrl: e.target.value }))} placeholder="https://…" />
+          <div className="ad-field">
+            <label className="ad-field-label">Item Photo</label>
+            <input type="file" accept="image/*" disabled={uploading}
+              onChange={e => handleUpload(e.target.files?.[0])} />
+            {uploading && <p className="ad-upload-status">Uploading… {uploadPct}%</p>}
+            {uploadError && <p className="ad-upload-status ad-upload-status--error">{uploadError}</p>}
+            {form.imageUrl && (
+              <div className="ad-upload-preview">
+                <img src={form.imageUrl} alt="" />
+                <span className={form.imageVerified ? 'ad-upload-verified' : 'ad-upload-unverified'}>
+                  {form.imageVerified ? '✓ Verified — will be shown to users' : '⚠ Not yet verified — won\'t be shown to users'}
+                </span>
+              </div>
+            )}
+            <details className="ad-upload-manual">
+              <summary>Or paste an existing image URL</summary>
+              <Inp value={form.imageUrl}
+                onChange={e => setForm(p => ({ ...p, imageUrl: e.target.value, publicId: '', imageVerified: false }))}
+                placeholder="https://res.cloudinary.com/…" />
+              <label className="ad-upload-confirm">
+                <input type="checkbox" checked={form.imageVerified}
+                  onChange={e => setForm(p => ({ ...p, imageVerified: e.target.checked }))} />
+                I confirm this image accurately shows this exact item
+              </label>
+            </details>
+          </div>
           <Inp label="Tags (comma-separated)" value={form.tags} onChange={e => setForm(p => ({ ...p, tags: e.target.value }))} />
           <div className="ad-field">
             <label className="ad-field-label">Description</label>

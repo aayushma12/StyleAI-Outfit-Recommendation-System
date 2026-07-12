@@ -170,6 +170,14 @@
 }
 .wd-btn-add:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,.18); }
 
+.wd-btn-add--ghost {
+  background: rgba(255,255,255,.14);
+  color: #fff;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,.4);
+}
+.wd-btn-add--ghost:hover { background: rgba(255,255,255,.22); box-shadow: none; }
+
 /* Wardrobe Stats Panel */
 .wd-stats-panel {
   border-bottom: 1px solid var(--border-subtle);
@@ -999,6 +1007,7 @@ body.dark-mode .wd-stat-chip { background: rgba(13,148,136,0.1); border-color: r
 }
 .wd-req       { color: var(--wd-accent); }
 .wd-opt       { font-size: .72rem; color: var(--text-muted); font-weight: 400; margin-left: 2px; }
+.wd-hint      { font-size: .74rem; color: var(--text-muted); margin: 5px 0 0; }
 .wd-count {
   background: var(--wd-primary);
   color: #fff;
@@ -1056,6 +1065,12 @@ body.dark-mode .wd-stat-chip { background: rgba(13,148,136,0.1); border-color: r
 .wd-chip--on                             { background: var(--wd-primary); border-color: var(--wd-primary); color: #fff; }
 .wd-chip--season.wd-chip--on             { background: var(--wd-green);   border-color: var(--wd-green);   color: #fff; }
 .wd-chip--season:hover:not(.wd-chip--on) { border-color: var(--wd-green); color: var(--wd-green); }
+.wd-chip--cat {
+  padding: 12px 22px;
+  font-size: 14.5px;
+  font-weight: 600;
+  border-radius: 12px;
+}
 
 /* Image Uploader */
 .wd-uploader { width: 100%; }

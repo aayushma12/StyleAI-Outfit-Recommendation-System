@@ -156,6 +156,13 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
         status,
       });
       if (status === 'saved') showToast('Outfit saved! ✓');
+      // Rejecting today's pick should never leave a "no" sitting on screen —
+      // immediately generate a fresh replacement instead of making the user
+      // notice and press a separate regenerate button.
+      if (status === 'disliked') {
+        showToast('Finding you a different outfit…');
+        await regenerate();
+      }
     } catch { /* non-critical */ }
   };
 
@@ -208,11 +215,11 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
 
   const primaryItems = PRIMARY_SLOTS
     .map(slot => ({ slot, data: outfit[slot] }))
-    .filter(({ data }) => data && (data.name || data.suggestion));
+    .filter(({ data }) => data && (data.name || data.suggestion || data.suggestedItem));
 
   const accentItems = ACCENT_SLOTS
     .map(slot => ({ slot, data: outfit[slot] }))
-    .filter(({ data }) => data && (data.name || data.suggestion));
+    .filter(({ data }) => data && (data.name || data.suggestion || data.suggestedItem));
 
   const wxIcon = wx?.isRaining ? I.rain : wx?.temp > 28 ? I.sun : I.cloud;
   const wxStr  = wx?.temp != null
@@ -294,17 +301,24 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
             Add items to your wardrobe to get clothing suggestions.
           </div>
         )}
-        {primaryItems.map(({ slot, data }) => (
-          <div key={slot} className={`doc-item${data.item ? ' doc-item--owned' : ''}`}>
-            <span className="doc-item-emoji">{SLOT_EMOJI[slot] || '✨'}</span>
-            <div className="doc-item-body">
-              <div className="doc-item-name">{data.name || data.suggestion}</div>
-              {data.reason && <div className="doc-item-reason">{data.reason}</div>}
+        {primaryItems.map(({ slot, data }) => {
+          const isCatalog = !data.item && !!data.suggestedItem;
+          const imageUrl  = data.item?.imageUrl || data.suggestedItem?.imageUrl;
+          return (
+            <div key={slot} className={`doc-item${data.item ? ' doc-item--owned' : ''}`}>
+              {imageUrl
+                ? <img src={imageUrl} alt={data.name} className="doc-item-thumb" />
+                : <span className="doc-item-emoji">{SLOT_EMOJI[slot] || '✨'}</span>}
+              <div className="doc-item-body">
+                <div className="doc-item-name">{data.name || data.suggestion}</div>
+                {data.reason && <div className="doc-item-reason">{data.reason}</div>}
+              </div>
+              {data.item &&                 <span className="doc-item-badge">From Your Wardrobe</span>}
+              {isCatalog &&                 <span className="doc-item-badge doc-item-badge--sug">Suggested Addition</span>}
+              {!data.item && !isCatalog && data.suggestion && <span className="doc-item-badge doc-item-badge--sug">Suggested</span>}
             </div>
-            {data.item  && <span className="doc-item-badge">In wardrobe</span>}
-            {!data.item && data.suggestion && <span className="doc-item-badge doc-item-badge--sug">Suggested</span>}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ── Accessories ────────────────────────────────────────────────── */}
@@ -312,12 +326,20 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
         <>
           <div className="doc-section-label">Accessories</div>
           <div className="doc-accents">
-            {accentItems.map(({ slot, data }) => (
-              <div key={slot} className="doc-accent">
-                <span className="doc-accent-emoji">{SLOT_EMOJI[slot]}</span>
-                <span className="doc-accent-name">{data.name || data.suggestion}</span>
-              </div>
-            ))}
+            {accentItems.map(({ slot, data }) => {
+              const isCatalog = !data.item && !!data.suggestedItem;
+              const imageUrl  = data.item?.imageUrl || data.suggestedItem?.imageUrl;
+              return (
+                <div key={slot} className={`doc-accent${data.item ? ' doc-accent--owned' : ''}`}>
+                  {imageUrl
+                    ? <img src={imageUrl} alt={data.name} className="doc-accent-thumb" />
+                    : <span className="doc-accent-emoji">{SLOT_EMOJI[slot]}</span>}
+                  <span className="doc-accent-name">{data.name || data.suggestion}</span>
+                  {data.item && <span className="doc-accent-badge">From Your Wardrobe</span>}
+                  {isCatalog && <span className="doc-accent-badge doc-accent-badge--sug">Suggested Addition</span>}
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -429,7 +451,7 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
               const altOutfit   = rec.outfit || {};
               const altSlots    = [...PRIMARY_SLOTS, ...ACCENT_SLOTS]
                 .map(slot => ({ slot, data: altOutfit[slot] }))
-                .filter(({ data }) => data && (data.name || data.suggestion));
+                .filter(({ data }) => data && (data.name || data.suggestion || data.suggestedItem));
               const altColors   = altSlots.map(({ data }) => data.item?.color).filter(Boolean);
               const isTrending  = (rec.scores?.trendScore ?? 0) >= 70;
               const isExpanded  = expandedAlt === rec.category;
@@ -448,13 +470,16 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
 
                   {altSlots.length > 0 && (
                     <div className="doc-alt-thumbs">
-                      {altSlots.slice(0, 4).map(({ slot, data }) => (
-                        <div key={slot} className="doc-alt-thumb">
-                          {data.item?.imageUrl
-                            ? <img src={data.item.imageUrl} alt={data.name} loading="lazy" />
-                            : <span className="doc-alt-thumb-ph">{SLOT_EMOJI[slot] || '✨'}</span>}
-                        </div>
-                      ))}
+                      {altSlots.slice(0, 4).map(({ slot, data }) => {
+                        const thumbUrl = data.item?.imageUrl || data.suggestedItem?.imageUrl;
+                        return (
+                          <div key={slot} className="doc-alt-thumb">
+                            {thumbUrl
+                              ? <img src={thumbUrl} alt={data.name} loading="lazy" />
+                              : <span className="doc-alt-thumb-ph">{SLOT_EMOJI[slot] || '✨'}</span>}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -489,11 +514,15 @@ export default function DailyOutfitCard({ userName, onNavigate }) {
                         <img className="doc-alt-preview-img" src={previewUrl} alt={rec.outfitName} loading="lazy" />
                       ) : null}
                       <ul className="doc-alt-detail-list">
-                        {altSlots.map(({ slot, data }) => (
-                          <li key={slot}>
-                            <span className="doc-alt-detail-slot">{SLOT_EMOJI[slot] || '✨'} {LAYER_LABEL[slot] || slot}:</span> {data.name || data.suggestion}
-                          </li>
-                        ))}
+                        {altSlots.map(({ slot, data }) => {
+                          const isCatalog = !data.item && !!data.suggestedItem;
+                          return (
+                            <li key={slot}>
+                              <span className="doc-alt-detail-slot">{SLOT_EMOJI[slot] || '✨'} {LAYER_LABEL[slot] || slot}:</span> {data.name || data.suggestion}
+                              {isCatalog && <span className="doc-item-badge doc-item-badge--sug doc-alt-detail-badge">Suggested Addition</span>}
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   )}

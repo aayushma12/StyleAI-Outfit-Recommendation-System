@@ -75,10 +75,16 @@ describe('PUT /api/users/profile', () => {
 });
 
 describe('POST /api/users/onboarding', () => {
-  test('requires bodyType', async () => {
+  // Regression: the style quiz (Onboarding.jsx) never asks for bodyType, it only
+  // passes through whatever the account already has — an account that reaches
+  // this endpoint without one yet must still be able to complete onboarding.
+  test('succeeds without bodyType (style quiz never collects it)', async () => {
     const { token } = await registerAndGetToken(`onboard-missing-${Date.now()}@example.com`);
-    const res = await request(app).post('/api/users/onboarding').set('Authorization', `Bearer ${token}`).send({});
-    expect(res.status).toBe(400);
+    const res = await request(app).post('/api/users/onboarding').set('Authorization', `Bearer ${token}`)
+      .send({ stylePreferences: ['minimalist'] });
+    expect(res.status).toBe(200);
+    expect(res.body.user.onboardingCompleted).toBe(true);
+    expect(res.body.user.bodyType).toBeFalsy();
   });
 
   test('completes onboarding and sets onboardingCompleted true', async () => {

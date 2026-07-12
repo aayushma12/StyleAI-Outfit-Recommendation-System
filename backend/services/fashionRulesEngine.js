@@ -1,5 +1,7 @@
 'use strict';
 
+const { OCCASIONS } = require('../constants/occasions');
+
 // Approximate hue angles (0–360) for common garment colors
 const COLOR_HUE = {
   red: 0, crimson: 0, maroon: 0, burgundy: 330,
@@ -54,23 +56,19 @@ const STYLE_COMPAT = {
   sporty:       ['sporty', 'athleisure', 'casual'],
 };
 
-// Occasion formality levels and compatible styles
+// Occasion formality levels, compatible styles, and explicit footwear/
+// accessory gating — keyed to the canonical 5-group OCCASIONS list
+// (backend/constants/occasions.js). allowSneakers/allowHeavyAccessories are
+// deliberately explicit per group rather than derived from a formality
+// threshold, since "office" and "traditional" are both mid-to-high formality
+// but should NOT be treated the same for accessory weight (office wants
+// minimal styling; only traditional/wedding wear should get heavy jewellery).
 const OCCASION_META = {
-  daily:      { formality: 1, styles: ['casual', 'minimalist', 'korean', 'streetwear'] },
-  college:    { formality: 1, styles: ['casual', 'korean', 'streetwear', 'minimalist', 'y2k'] },
-  home:       { formality: 0, styles: ['casual', 'athleisure', 'loungewear'] },
-  travel:     { formality: 1, styles: ['casual', 'minimalist', 'athleisure'] },
-  gym:        { formality: 0, styles: ['sporty', 'athleisure'] },
-  cafe:       { formality: 1, styles: ['casual', 'korean', 'minimalist', 'boho', 'vintage'] },
-  shopping:   { formality: 1, styles: ['casual', 'streetwear', 'korean', 'y2k'] },
-  date:       { formality: 2, styles: ['romantic', 'smart_casual', 'korean', 'classic', 'minimalist'] },
-  party:      { formality: 2, styles: ['edgy', 'streetwear', 'y2k', 'romantic', 'classic'] },
-  office:     { formality: 3, styles: ['smart_casual', 'classic', 'minimalist', 'formal'] },
-  formal:     { formality: 4, styles: ['formal', 'classic'] },
-  festival:   { formality: 3, styles: ['traditional', 'boho', 'romantic'] },
-  wedding:    { formality: 4, styles: ['traditional', 'formal', 'classic'] },
-  pooja:      { formality: 3, styles: ['traditional', 'classic'] },
-  trekking:   { formality: 0, styles: ['sporty', 'athleisure', 'casual'] },
+  sports:      { formality: 0, styles: ['sporty', 'athleisure'], allowSneakers: true,  allowHeavyAccessories: false },
+  daily:       { formality: 1, styles: ['casual', 'minimalist', 'korean', 'streetwear'], allowSneakers: true,  allowHeavyAccessories: false },
+  party:       { formality: 2, styles: ['edgy', 'streetwear', 'y2k', 'romantic', 'classic'], allowSneakers: false, allowHeavyAccessories: false },
+  office:      { formality: 3, styles: ['smart_casual', 'classic', 'minimalist', 'formal'], allowSneakers: false, allowHeavyAccessories: false },
+  traditional: { formality: 4, styles: ['traditional', 'formal', 'classic', 'boho', 'romantic'], allowSneakers: false, allowHeavyAccessories: true },
 };
 
 // Weather layering tiers (temperature ranges in °C)
@@ -251,9 +249,9 @@ exports.weatherSuitabilityScore = function weatherSuitabilityScore(outfitSlots, 
 };
 
 exports.validateOutfitCategories = function validateOutfitCategories(slots) {
-  const hasTop    = !!(slots.top?.name    || slots.top?.item);
-  const hasBottom = !!(slots.bottom?.name || slots.bottom?.item);
-  const hasDress  = !!(slots.dress?.name  || slots.dress?.item);
+  const hasTop    = !!(slots.top?.name    || slots.top?.item    || slots.top?.suggestion);
+  const hasBottom = !!(slots.bottom?.name || slots.bottom?.item || slots.bottom?.suggestion);
+  const hasDress  = !!(slots.dress?.name  || slots.dress?.item  || slots.dress?.suggestion);
 
   if (hasDress && (hasTop || hasBottom)) {
     return { valid: false, issue: 'Dress and separate top/bottom conflict — use one or the other' };
@@ -281,6 +279,7 @@ exports.getWeatherLayeringAdvice = function getWeatherLayeringAdvice(temp) {
 };
 
 exports.STYLE_COMPAT      = STYLE_COMPAT;
+exports.OCCASIONS         = OCCASIONS;
 exports.OCCASION_META     = OCCASION_META;
 exports.WEATHER_TIERS     = WEATHER_TIERS;
 exports.NEUTRAL_COLORS    = NEUTRAL_COLORS;
@@ -353,20 +352,58 @@ exports.FABRIC_KEYWORDS   = FABRIC_KEYWORDS;
 // fields (formalityLevel/suitableSeasons) always pass — they're soft-scored
 // later, never hard-filtered, so nothing already in a user's wardrobe becomes
 // unusable just because it predates this metadata.
-exports.hardFilterItem = function hardFilterItem(item, targetOccasion, currentSeason) {
+const SNEAKER_KW = /sneaker|trainer|sport(s)? ?shoe|running shoe|flip.?flop|slipper|crocs?|rubber sandal|canvas shoe/i;
+const HEAVY_ACCESSORY_KW = /bridal|ceremonial|kundan|polki|statement|chunky|embellished|oversized|temple jewel(le)?ry|choker set|maang tikka|layered necklace/i;
+const LIGHT_ACCESSORY_KW = /simple|minimal|thin|stud|everyday|delicate|small hoop/i;
+const ACCESSORY_SLOTS = new Set(['jewelry', 'bag', 'belt', 'watch', 'scarf', 'sunglasses', 'hair_accessory']);
+
+function classifyAccessoryWeight(item) {
+  const text = `${item.subcategory || ''} ${(item.styleTags || []).join(' ')} ${item.materialGuess || ''} ${item.name || ''}`.toLowerCase();
+  if (HEAVY_ACCESSORY_KW.test(text)) return 'heavy';
+  if (LIGHT_ACCESSORY_KW.test(text)) return 'light';
+  return 'moderate';
+}
+
+exports.hardFilterItem = function hardFilterItem(item, targetOccasion, currentSeason, slot = '') {
   const target = (targetOccasion || '').toLowerCase().trim().replace(/[\s-]/g, '_');
   const meta   = OCCASION_META[target];
+  const isAccessorySlot = ACCESSORY_SLOTS.has(slot);
 
-  if (meta && Number.isInteger(item.formalityLevel)) {
-    if (Math.abs(item.formalityLevel - meta.formality) > 2) return false;
+  // Tightened from >2 to >1 now that occasion is a reliable required
+  // canonical enum instead of unreliable free text. Scoped to non-accessory
+  // slots — accessories rely on the dedicated weight-based rule below
+  // instead, since a plain formality-gap check would also reject a light,
+  // perfectly appropriate accessory just for being "underdressed" on paper,
+  // which isn't the failure mode we're guarding against here.
+  if (!isAccessorySlot && meta && Number.isInteger(item.formalityLevel)) {
+    if (Math.abs(item.formalityLevel - meta.formality) > 1) return false;
   }
 
   if (currentSeason && Array.isArray(item.suitableSeasons) && item.suitableSeasons.length > 0) {
     if (!item.suitableSeasons.includes('all') && !item.suitableSeasons.includes(currentSeason)) return false;
   }
 
+  // Footwear: hard-reject sneakers/sport-shoes/flip-flops for any occasion
+  // group that doesn't explicitly allow them (party/office/traditional) —
+  // e.g. sneakers with a wedding lehenga or gym shoes for the office.
+  if (slot === 'footwear' && meta && !meta.allowSneakers) {
+    const text = `${item.subcategory || ''} ${item.name || ''} ${item.materialGuess || ''}`.toLowerCase();
+    if (SNEAKER_KW.test(text)) return false;
+  }
+
+  // Accessories: hard-reject heavy/bridal-weight pieces for any occasion
+  // group that doesn't explicitly allow them — heavy jewellery is reserved
+  // for traditional/wedding wear, never casual, office, party, or sports.
+  // Deliberately one-directional: a light accessory at a traditional
+  // occasion is only soft-scored, not hard-rejected.
+  if (isAccessorySlot && meta && !meta.allowHeavyAccessories) {
+    if (classifyAccessoryWeight(item) === 'heavy') return false;
+  }
+
   return true;
 };
+
+exports.classifyAccessoryWeight = classifyAccessoryWeight;
 
 // ── Generic suggestions (candidate generation, Phase 2) ─────────────────────
 // Lets the pipeline always produce a complete, sensible outfit with ZERO LLM
@@ -383,11 +420,9 @@ const GENERIC_OUTERWEAR = {
 };
 
 const GENERIC_FOOTWEAR = {
-  formal: 'polished heels or dressy flats', office: 'smart loafers or block heels',
-  festival: 'traditional juttis or embellished flats', wedding: 'elegant heels or embellished juttis',
-  pooja: 'simple flats that are easy to remove', party: 'statement heels or stylish flats',
-  gym: 'supportive sneakers', trekking: 'sturdy trekking shoes', date: 'chic flats or low heels',
-  college: 'comfortable sneakers or loafers', daily: 'comfortable everyday sneakers or flats',
+  office: 'smart loafers or block heels', traditional: 'elegant heels or embellished juttis',
+  party: 'statement heels or stylish flats', sports: 'supportive sneakers',
+  daily: 'comfortable everyday sneakers or flats',
 };
 
 const GENERIC_TRADITIONAL = {
@@ -404,7 +439,7 @@ const GENERIC_DEFAULT = {
 
 exports.getGenericSuggestion = function getGenericSuggestion(slot, weatherTier, occasion, styleHint) {
   const occ = (occasion || '').toLowerCase().trim().replace(/[\s-]/g, '_');
-  const traditional = styleHint === 'traditional' || occ === 'festival' || occ === 'wedding' || occ === 'pooja';
+  const traditional = styleHint === 'traditional' || occ === 'traditional';
 
   if (slot === 'outerwear') return GENERIC_OUTERWEAR[weatherTier] || GENERIC_OUTERWEAR.mild;
   if (slot === 'footwear')  return (traditional && GENERIC_TRADITIONAL.footwear) || GENERIC_FOOTWEAR[occ] || 'comfortable everyday sneakers or flats';

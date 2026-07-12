@@ -6,14 +6,9 @@ const router  = express.Router();
 const { protect } = require('../middleware/auth');
 const validateObjectId = require('../middleware/validateObjectId');
 const ctrl    = require('../controllers/recommendationController');
+const { OCCASIONS: VALID_OCCASIONS } = require('../constants/occasions');
 
 const checkId = validateObjectId('id');
-
-const VALID_OCCASIONS = [
-  'daily', 'college', 'home', 'travel', 'gym', 'cafe', 'shopping',
-  'date', 'party', 'office', 'formal', 'festival', 'wedding', 'pooja', 'trekking',
-  'interview', 'birthday', 'traditional_ceremony', 'graduation', 'family_gathering',
-];
 
 const validateGenerate = [
   body('occasion').optional().isString().trim().isIn(VALID_OCCASIONS)
@@ -27,18 +22,14 @@ const validateGenerate = [
   },
 ];
 
+// Kept deliberately minimal — the wizard only ever asks 3 questions
+// (occasion, style, optional notes). No budget/price fields: this app helps
+// users decide what to wear, not what to buy.
 const validateWizard = [
-  body('occasion').optional().isString().trim(),
-  body('dresscode').optional().isString().trim().isLength({ max: 100 }),
-  body('budget').optional().isString().trim().isIn(['budget', 'mid-range', 'premium', 'luxury']),
-  body('indoorOutdoor').optional().isString().isIn(['indoor', 'outdoor', 'both']),
-  body('dayNight').optional().isString().isIn(['day', 'night', 'both']),
+  body('occasion').optional().isString().trim().isIn(VALID_OCCASIONS)
+    .withMessage(`occasion must be one of: ${VALID_OCCASIONS.join(', ')}`),
   body('style').optional().isString().trim().isLength({ max: 100 }),
-  body('vibe').optional().isString().trim().isLength({ max: 100 }),
-  body('accessories').optional().isBoolean(),
-  body('colors').optional().isString().trim().isLength({ max: 200 }),
-  body('extraNotes').optional().isString().trim().isLength({ max: 500 }),
-  body('luxuryBudget').optional().isBoolean(),
+  body('extraNotes').optional().isString().trim().isLength({ max: 300 }),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });

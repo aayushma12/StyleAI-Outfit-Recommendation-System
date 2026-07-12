@@ -54,7 +54,7 @@ describe('POST /api/ai/chat — outfit-intent routing persists recommendationSes
 describe('POST /api/ai/chat — freehand replies run the grounding check', () => {
   test('a freehand reply referencing a real wardrobe item is not flagged', async () => {
     const { token, userId } = await registerAndGetToken(`chat-freehand-ok-${Date.now()}@example.com`);
-    await WardrobeItem.create({ user: userId, name: 'Black Leather Jacket', category: 'jackets', color: 'black' });
+    await WardrobeItem.create({ user: userId, name: 'Black Leather Jacket', category: 'tops', color: 'black', occasion: 'daily' });
 
     aiProvider.generateChatReply.mockResolvedValue('Your black leather jacket is a versatile piece for cool evenings.');
 
@@ -71,7 +71,7 @@ describe('POST /api/ai/chat — freehand replies run the grounding check', () =>
 
   test('a freehand reply referencing an item not in the wardrobe is flagged', async () => {
     const { token, userId } = await registerAndGetToken(`chat-freehand-flag-${Date.now()}@example.com`);
-    await WardrobeItem.create({ user: userId, name: 'Black Leather Jacket', category: 'jackets', color: 'black' });
+    await WardrobeItem.create({ user: userId, name: 'Black Leather Jacket', category: 'tops', color: 'black', occasion: 'daily' });
 
     aiProvider.generateChatReply.mockResolvedValue('Your emerald green silk saree would be stunning for the festival.');
 

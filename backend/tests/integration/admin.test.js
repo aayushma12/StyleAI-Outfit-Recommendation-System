@@ -75,3 +75,46 @@ describe('DELETE /api/admin/users/:id — full data cleanup', () => {
     expect(await User.findById(userId)).toBeNull();
   });
 });
+
+describe('POST/PUT /api/admin/outfits — imageVerified never trusted implicitly', () => {
+  test('defaults imageVerified to false even when an imageUrl is supplied', async () => {
+    const adminToken = await mkAdminToken();
+    const res = await request(app).post('/api/admin/outfits').set('Authorization', `Bearer ${adminToken}`).send({
+      name: 'Test Catalog Item', category: 'tops',
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/item.jpg',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.outfit.imageVerified).toBe(false);
+  });
+
+  test('persists imageVerified:true only when explicitly set (a real upload or confirmed manual URL)', async () => {
+    const adminToken = await mkAdminToken();
+    const res = await request(app).post('/api/admin/outfits').set('Authorization', `Bearer ${adminToken}`).send({
+      name: 'Verified Catalog Item', category: 'footwear',
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/item.jpg',
+      imageVerified: true,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.outfit.imageVerified).toBe(true);
+  });
+
+  test('rejects a non-Cloudinary imageUrl (SSRF guard applied at the route layer, same as wardrobe)', async () => {
+    const adminToken = await mkAdminToken();
+    const res = await request(app).post('/api/admin/outfits').set('Authorization', `Bearer ${adminToken}`).send({
+      name: 'Bad Image Item', category: 'tops', imageUrl: 'http://169.254.169.254/latest/meta-data/',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('PUT can toggle imageVerified independently of imageUrl', async () => {
+    const adminToken = await mkAdminToken();
+    const create = await request(app).post('/api/admin/outfits').set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Togglable Item', category: 'tops' });
+    const id = create.body.outfit._id;
+
+    const update = await request(app).put(`/api/admin/outfits/${id}`).set('Authorization', `Bearer ${adminToken}`)
+      .send({ imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/item.jpg', imageVerified: true });
+    expect(update.status).toBe(200);
+    expect(update.body.outfit.imageVerified).toBe(true);
+  });
+});

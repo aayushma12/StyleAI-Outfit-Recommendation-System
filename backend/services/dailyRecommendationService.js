@@ -93,14 +93,14 @@ exports.getOrGenerateDaily = async (userId) => {
   const todayStart = todayStartUTC();
 
   // ── Fast path: today's daily recommendation already exists ─────────────────
-  const existing = await Recommendation.populateItems(
+  const existing = await Recommendation.populateAndSanitize(
     Recommendation.findOne({
       user:                   userId,
       'context.requestedBy':  'daily',
       status:                 'complete',
       createdAt:              { $gte: todayStart },
     }).sort({ createdAt: -1 })
-  ).lean();
+  );
 
   if (existing) {
     return {

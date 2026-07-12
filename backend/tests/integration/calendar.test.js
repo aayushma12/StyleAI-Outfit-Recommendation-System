@@ -4,6 +4,8 @@ const request = require('supertest');
 const app = require('../../app');
 const OutfitCalendar = require('../../models/OutfitCalendar');
 const WardrobeCombo = require('../../models/WardrobeCombo');
+const BehaviorLog = require('../../models/BehaviorLog');
+const WardrobeItem = require('../../models/WardrobeItem');
 
 async function registerAndGetToken(email) {
   const res = await request(app).post('/api/auth/register').send({
@@ -37,6 +39,33 @@ describe('POST /api/calendar — upsertEntry', () => {
     const entries = await OutfitCalendar.find({ user: userId });
     expect(entries.length).toBe(1);
     expect(entries[0].outfitName).toBe('Second');
+  });
+
+  test('scheduling a real combo logs an outfit_save behavior event with its item ids (regression: calendar used to have zero effect on recommendation history)', async () => {
+    const { token, userId } = await registerAndGetToken(`cal-behavior-${Date.now()}@example.com`);
+    const item = await WardrobeItem.create({ user: userId, name: 'Scheduled Top', category: 'tops', color: 'blue', occasion: 'daily' });
+    const combo = await WardrobeCombo.create({ user: userId, name: 'Scheduled Combo', items: [item._id] });
+
+    const res = await request(app).post('/api/calendar').set('Authorization', `Bearer ${token}`)
+      .send({ date: '2026-10-01', outfitName: 'Scheduled Combo', combo: combo._id });
+    expect(res.status).toBe(200);
+
+    await new Promise(r => setTimeout(r, 100)); // logBehavior is fire-and-forget
+
+    const log = await BehaviorLog.findOne({ user: userId, action: 'outfit_save', entityId: combo._id });
+    expect(log).not.toBeNull();
+    expect(log.metadata.itemIds.map(String)).toEqual([item._id.toString()]);
+  });
+
+  test('does not log a behavior event when no combo is attached (a freeform/manual entry)', async () => {
+    const { token, userId } = await registerAndGetToken(`cal-behavior-nocombo-${Date.now()}@example.com`);
+    await request(app).post('/api/calendar').set('Authorization', `Bearer ${token}`)
+      .send({ date: '2026-10-02', outfitName: 'No Combo Here' });
+
+    await new Promise(r => setTimeout(r, 100));
+
+    const log = await BehaviorLog.findOne({ user: userId, action: 'outfit_save' });
+    expect(log).toBeNull();
   });
 });
 

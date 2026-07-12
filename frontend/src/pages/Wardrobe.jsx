@@ -1,8 +1,9 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import axios from 'axios';
 import api from '../services/api';
 import { getMeterColor } from '../utils/confidenceScale';
 import useDebounce from '../hooks/useDebounce';
+import { uploadWardrobeImage } from '../utils/cloudinaryUpload';
+import { OCCASIONS, OCCASION_LABELS } from '../constants/occasions';
 import './Wardrobe.css';
 
 const Ic = ({ d, size = 16 }) => (
@@ -30,8 +31,11 @@ const I = {
   hanger:  'M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.86H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.86l.58-3.57a2 2 0 00-1.34-2.23z',
 };
 
-const CATEGORIES = ['tops','bottoms','dresses','jackets','footwear','accessories','traditional'];
-const OCCASIONS  = ['daily','college','office','festival','wedding','party','casual_outing','religious'];
+// Full 5-category enum, used for edit mode and the footwear/accessory add
+// flow. The fast clothing-add flow (FastAddModal) uses only the first 3.
+const CATEGORIES = ['tops', 'bottoms', 'dresses', 'footwear', 'accessories'];
+const CLOTHING_CATEGORIES = ['tops', 'bottoms', 'dresses'];
+const FOOTWEAR_ACCESSORY_CATEGORIES = ['footwear', 'accessories'];
 const SEASONS    = ['summer','winter','monsoon','spring','all'];
 
 // AI-extracted metadata options (Phase 1: hybrid k-means color + vision-LLM pipeline)
@@ -41,6 +45,10 @@ const SLEEVE_LENGTHS = ['sleeveless','short','3/4','long'];
 const STYLE_TAG_OPTS = ['minimalist','streetwear','smart_casual','korean','vintage','preppy','athleisure','romantic','edgy','boho','classic','grunge','cottagecore','y2k','modest_chic'];
 const NECKLINES  = ['crew','round','v_neck','polo_collar','shirt_collar','turtleneck','high_neck','square_neck','off_shoulder','boat_neck'];
 const GENDERS    = ['women','men','unisex'];
+const TEXTURES   = ['smooth','ribbed','knit','woven','lace','sequined','embroidered','denim','leather','velvet','satin','other'];
+const SILHOUETTES = ['fitted','a_line','straight','flared','bodycon','oversized','wrap','asymmetric','other'];
+const WEATHER_SUITABILITY = ['hot','mild','cold','rainy','any'];
+const CULTURAL_CATEGORIES = ['western','indo_western','traditional','fusion','other'];
 const DETAIL_FLAGS = [
   { key: 'hasHood',       label: 'Hood' },
   { key: 'hasButtons',    label: 'Buttons' },
@@ -300,6 +308,8 @@ const EMPTY_FORM = {
   subcategory: '', pattern: '', fit: '', sleeveLength: '', materialGuess: '',
   styleTags: [], suitableSeasons: [], suitableOccasions: [], colorHex: [],
   neckline: '', genderCategory: '', details: { ...EMPTY_DETAILS },
+  isCompleteOutfit: false,
+  texture: '', silhouette: '', weatherSuitability: '', culturalCategory: '',
   aiMeta: null,
 };
 
@@ -317,7 +327,216 @@ function AiBadge({ confidence }) {
   );
 }
 
-function ItemModal({ item, onClose, onSave }) {
+// Shared AI/CV-extracted metadata field set — every value here is
+// AI-prefilled and editable via the same AiBadge/aiSuggested convention.
+// Used by both ItemModal (edit + footwear/accessory add) and FastAddModal's
+// review step (fast clothing add), so both paths render identically.
+function MetadataFields({ form, set, toggleChip, toggleDetail, aiSuggested, category }) {
+  // Footwear/accessories get a deliberately minimal review screen — only
+  // Subcategory/Material/Style Tags/Notes stay visible. Everything else here
+  // (pattern, sleeve/neckline/fit, seasons/occasions chips, gender, texture,
+  // silhouette, weather, cultural category, construction details) is either
+  // garment-specific or a nice-to-have the AI already filled in the
+  // background — no need to make the user review it for a pair of shoes or
+  // a necklace. Toggled by the same `isGarment` flag throughout.
+  const isGarment = category !== 'footwear' && category !== 'accessories';
+  return (
+    <>
+      {/* Subcategory */}
+      <div className="wd-field">
+        <label className="wd-label">Subcategory <span className="wd-opt">(optional)</span>{aiSuggested.has('subcategory') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.subcategory} />}</label>
+        <input className="wd-input" placeholder="e.g. Blouse, Ankle boots"
+          value={form.subcategory} onChange={e => set('subcategory', e.target.value)} />
+      </div>
+
+      {/* Pattern — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Pattern <span className="wd-opt">(optional)</span>{aiSuggested.has('pattern') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.pattern} />}</label>
+          <select className="wd-select" value={form.pattern} onChange={e => set('pattern', e.target.value)}>
+            <option value="">Select pattern</option>
+            {PATTERNS.map(p => <option key={p} value={p}>{cap(p)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Fit — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Fit <span className="wd-opt">(optional)</span>{aiSuggested.has('fit') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.fit} />}</label>
+          <select className="wd-select" value={form.fit} onChange={e => set('fit', e.target.value)}>
+            <option value="">Select fit</option>
+            {FITS.map(f => <option key={f} value={f}>{cap(f)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Sleeve length — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Sleeve Length <span className="wd-opt">(optional)</span>{aiSuggested.has('sleeveLength') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.sleeveLength} />}</label>
+          <select className="wd-select" value={form.sleeveLength} onChange={e => set('sleeveLength', e.target.value)}>
+            <option value="">Select sleeve length</option>
+            {SLEEVE_LENGTHS.map(s => <option key={s} value={s}>{cap(s)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Material guess */}
+      <div className="wd-field">
+        <label className="wd-label">Material <span className="wd-opt">(optional)</span>{aiSuggested.has('materialGuess') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.materialGuess} />}</label>
+        <input className="wd-input" placeholder="e.g. Cotton, Denim, Chiffon"
+          value={form.materialGuess} onChange={e => set('materialGuess', e.target.value)} />
+      </div>
+
+      {/* Style tags */}
+      <div className="wd-field wd-field--full">
+        <label className="wd-label">Style Tags <span className="wd-opt">(optional)</span>{aiSuggested.has('styleTags') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.styleTags} />}</label>
+        <div className="wd-chips">
+          {STYLE_TAG_OPTS.map(s => (
+            <button type="button" key={s}
+              className={`wd-chip ${form.styleTags.includes(s) ? 'wd-chip--on' : ''}`}
+              onClick={() => toggleChip('styleTags', s)}>{cap(s)}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Suitable seasons — garment-only (footwear/accessories already have the single Season field above) */}
+      {isGarment && (
+        <div className="wd-field wd-field--full">
+          <label className="wd-label">Suitable Seasons <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableSeasons') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.suitableSeasons} />}</label>
+          <div className="wd-chips">
+            {['winter','spring','monsoon','autumn','all'].map(s => (
+              <button type="button" key={s}
+                className={`wd-chip wd-chip--season ${form.suitableSeasons.includes(s) ? 'wd-chip--on' : ''}`}
+                onClick={() => toggleChip('suitableSeasons', s)}>{cap(s)}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Suitable occasions — garment-only (footwear/accessories already have the primary Occasion from step 2) */}
+      {isGarment && (
+        <div className="wd-field wd-field--full">
+          <label className="wd-label">Suitable Occasions <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableOccasions') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.suitableOccasions} />}</label>
+          <div className="wd-chips">
+            {OCCASIONS.map(o => (
+              <button type="button" key={o}
+                className={`wd-chip ${form.suitableOccasions.includes(o) ? 'wd-chip--on' : ''}`}
+                onClick={() => toggleChip('suitableOccasions', o)}>{OCCASION_LABELS[o] || cap(o)}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Neckline — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Neckline <span className="wd-opt">(optional)</span>{aiSuggested.has('neckline') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.neckline} />}</label>
+          <select className="wd-select" value={form.neckline} onChange={e => set('neckline', e.target.value)}>
+            <option value="">Select neckline</option>
+            {NECKLINES.map(n => <option key={n} value={n}>{cap(n)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Gender category — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Gender <span className="wd-opt">(optional)</span>{aiSuggested.has('genderCategory') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.genderCategory} />}</label>
+          <select className="wd-select" value={form.genderCategory} onChange={e => set('genderCategory', e.target.value)}>
+            <option value="">Select gender</option>
+            {GENDERS.map(g => <option key={g} value={g}>{cap(g)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Texture — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Texture <span className="wd-opt">(optional)</span>{aiSuggested.has('texture') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.texture} />}</label>
+          <select className="wd-select" value={form.texture} onChange={e => set('texture', e.target.value)}>
+            <option value="">Select texture</option>
+            {TEXTURES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Silhouette — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Silhouette <span className="wd-opt">(optional)</span>{aiSuggested.has('silhouette') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.silhouette} />}</label>
+          <select className="wd-select" value={form.silhouette} onChange={e => set('silhouette', e.target.value)}>
+            <option value="">Select silhouette</option>
+            {SILHOUETTES.map(s => <option key={s} value={s}>{cap(s)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Weather suitability — garment-only */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Weather Suitability <span className="wd-opt">(optional)</span>{aiSuggested.has('weatherSuitability') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.weatherSuitability} />}</label>
+          <select className="wd-select" value={form.weatherSuitability} onChange={e => set('weatherSuitability', e.target.value)}>
+            <option value="">Select weather suitability</option>
+            {WEATHER_SUITABILITY.map(w => <option key={w} value={w}>{cap(w)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Cultural category — garment-only; informational only, never a hard filter */}
+      {isGarment && (
+        <div className="wd-field">
+          <label className="wd-label">Cultural Category <span className="wd-opt">(optional)</span>{aiSuggested.has('culturalCategory') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.culturalCategory} />}</label>
+          <select className="wd-select" value={form.culturalCategory} onChange={e => set('culturalCategory', e.target.value)}>
+            <option value="">Select cultural category</option>
+            {CULTURAL_CATEGORIES.map(c => <option key={c} value={c}>{cap(c)}</option>)}
+          </select>
+          <p className="wd-hint">Used to enrich suggestions, not a hard filter.</p>
+        </div>
+      )}
+
+      {/* Complete outfit flag — garment-only */}
+      {isGarment && (
+        <div className="wd-field wd-field--full">
+          <label className="wd-label">Outfit Structure <span className="wd-opt">(optional)</span>{aiSuggested.has('isCompleteOutfit') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.isCompleteOutfit} />}</label>
+          <div className="wd-chips">
+            <button type="button"
+              className={`wd-chip ${form.isCompleteOutfit ? 'wd-chip--on' : ''}`}
+              onClick={() => set('isCompleteOutfit', !form.isCompleteOutfit)}>
+              This is already a complete outfit
+            </button>
+          </div>
+          <p className="wd-hint">Saree, lehenga, kurta set, co-ord set — never needs a separate bottom in recommendations.</p>
+        </div>
+      )}
+
+      {/* Additional details — garment-only */}
+      {isGarment && (
+        <div className="wd-field wd-field--full">
+          <label className="wd-label">Additional Details <span className="wd-opt">(optional)</span>{aiSuggested.has('details') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.details} />}</label>
+          <div className="wd-chips">
+            {DETAIL_FLAGS.map(({ key, label }) => (
+              <button type="button" key={key}
+                className={`wd-chip ${form.details?.[key] ? 'wd-chip--on' : ''}`}
+                onClick={() => toggleDetail(key)}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Notes */}
+      <div className="wd-field wd-field--full">
+        <label className="wd-label">Notes <span className="wd-opt">(optional)</span></label>
+        <textarea className="wd-textarea" rows={2}
+          placeholder="Any special notes about this item…"
+          value={form.notes} onChange={e => set('notes', e.target.value)} />
+      </div>
+    </>
+  );
+}
+
+function ItemModal({ item, onClose, onSave, categoryOptions = CATEGORIES }) {
   const isEdit = !!item;
   const [form, setForm] = useState(isEdit ? {
     name:      item.name      || '',
@@ -340,8 +559,20 @@ function ItemModal({ item, onClose, onSave }) {
     neckline:        item.neckline        || '',
     genderCategory:  item.genderCategory  || '',
     details:         { ...EMPTY_DETAILS, ...(item.details || {}) },
+    isCompleteOutfit: item.isCompleteOutfit || false,
+    texture:            item.texture            || '',
+    silhouette:         item.silhouette         || '',
+    weatherSuitability: item.weatherSuitability || '',
+    culturalCategory:   item.culturalCategory   || '',
     aiMeta:          item.aiMeta          || null,
   } : { ...EMPTY_FORM });
+
+  // Defensive: a legacy (pre-migration) item's stored category may not be in
+  // the current 5-value enum (e.g. 'jackets'/'traditional') — render it as a
+  // selectable extra option rather than showing a blank select.
+  const categorySelectOptions = (isEdit && item.category && !categoryOptions.includes(item.category))
+    ? [item.category, ...categoryOptions]
+    : categoryOptions;
 
   const [uploadFile,  setUploadFile]  = useState(null);
   const [uploading,   setUploading]   = useState(false);
@@ -397,6 +628,11 @@ function ItemModal({ item, onClose, onSave }) {
     neckline:          f.neckline         || meta.neckline         || '',
     genderCategory:    f.genderCategory   || meta.genderCategory   || '',
     details:           meta.details ? { ...EMPTY_DETAILS, ...meta.details } : (f.details || { ...EMPTY_DETAILS }),
+    isCompleteOutfit:  f.isCompleteOutfit || meta.isCompleteOutfit || false,
+    texture:            f.texture            || meta.texture            || '',
+    silhouette:         f.silhouette         || meta.silhouette         || '',
+    weatherSuitability: f.weatherSuitability || meta.weatherSuitability || '',
+    culturalCategory:   f.culturalCategory   || meta.culturalCategory   || '',
     aiMeta:            meta.aiMeta,
   });
 
@@ -422,6 +658,7 @@ function ItemModal({ item, onClose, onSave }) {
     if (!form.name.trim())  e.name     = 'Outfit name is required';
     if (!form.category)     e.category = 'Category is required';
     if (!form.color.trim()) e.color    = 'Color is required';
+    if (!form.occasion)     e.occasion = 'Occasion is required';
     setErrors(e);
     return !Object.keys(e).length;
   };
@@ -437,38 +674,15 @@ function ItemModal({ item, onClose, onSave }) {
         setUploadPct(0);
         setUploadError('');
 
-        const cloudName   = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
-        const uploadPreset = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
-
-        if (!cloudName || !uploadPreset) {
-          setUploadError('Image upload is not configured. Please contact the administrator.');
-          setUploading(false);
-          setSaving(false);
-          return;
-        }
-
         try {
-          const fd = new FormData();
-          fd.append('file', uploadFile);
-          fd.append('upload_preset', uploadPreset);
-          fd.append('folder', 'styleai/wardrobe');
-
-          const { data } = await axios.post(
-            `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
-            fd,
-            { onUploadProgress: e => setUploadPct(Math.round((e.loaded * 100) / (e.total || 1))) }
-          );
-
-          finalForm.imageUrl = data.secure_url;
-          finalForm.publicId = data.public_id || '';
+          const { imageUrl, publicId } = await uploadWardrobeImage(uploadFile, {
+            folder: 'styleai/wardrobe',
+            onProgress: setUploadPct,
+          });
+          finalForm.imageUrl = imageUrl;
+          finalForm.publicId = publicId;
         } catch (err) {
-          const cloudMsg = err.response?.data?.error?.message || '';
-          const isPreset = cloudMsg.toLowerCase().includes('preset') || cloudMsg.toLowerCase().includes('upload_preset');
-          setUploadError(
-            isPreset
-              ? `Upload preset "${uploadPreset}" not found. Create it as an unsigned preset on Cloudinary.`
-              : 'Image upload failed. Please try again.'
-          );
+          setUploadError(err.message);
           setUploading(false);
           setSaving(false);
           return;
@@ -577,8 +791,8 @@ function ItemModal({ item, onClose, onSave }) {
                 value={form.category}
                 onChange={e => set('category', e.target.value)}>
                 <option value="">Select category</option>
-                {CATEGORIES.map(c => (
-                  <option key={c} value={c}>{CAT_META[c].icon} {CAT_META[c].label}</option>
+                {categorySelectOptions.map(c => (
+                  <option key={c} value={c}>{(CAT_META[c]?.icon || '')} {CAT_META[c]?.label || cap(c)}</option>
                 ))}
               </select>
               {errors.category && <span className="wd-field-err">{errors.category}</span>}
@@ -600,12 +814,15 @@ function ItemModal({ item, onClose, onSave }) {
 
             {/* Occasion */}
             <div className="wd-field">
-              <label className="wd-label">Occasion</label>
-              <select className="wd-select" value={form.occasion}
+              <label className="wd-label">
+                Occasion <span className="wd-req">*</span>
+              </label>
+              <select className={`wd-select ${errors.occasion ? 'wd-input--err' : ''}`} value={form.occasion}
                 onChange={e => set('occasion', e.target.value)}>
                 <option value="">Select occasion</option>
-                {OCCASIONS.map(o => <option key={o} value={o}>{cap(o)}</option>)}
+                {OCCASIONS.map(o => <option key={o} value={o}>{OCCASION_LABELS[o] || cap(o)}</option>)}
               </select>
+              {errors.occasion && <span className="wd-field-err">{errors.occasion}</span>}
             </div>
 
             {/* Season */}
@@ -618,120 +835,7 @@ function ItemModal({ item, onClose, onSave }) {
               </select>
             </div>
 
-            {/* Subcategory */}
-            <div className="wd-field">
-              <label className="wd-label">Subcategory <span className="wd-opt">(optional)</span>{aiSuggested.has('subcategory') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.subcategory} />}</label>
-              <input className="wd-input" placeholder="e.g. Blouse, Ankle boots"
-                value={form.subcategory} onChange={e => set('subcategory', e.target.value)} />
-            </div>
-
-            {/* Pattern */}
-            <div className="wd-field">
-              <label className="wd-label">Pattern <span className="wd-opt">(optional)</span>{aiSuggested.has('pattern') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.pattern} />}</label>
-              <select className="wd-select" value={form.pattern} onChange={e => set('pattern', e.target.value)}>
-                <option value="">Select pattern</option>
-                {PATTERNS.map(p => <option key={p} value={p}>{cap(p)}</option>)}
-              </select>
-            </div>
-
-            {/* Fit */}
-            <div className="wd-field">
-              <label className="wd-label">Fit <span className="wd-opt">(optional)</span>{aiSuggested.has('fit') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.fit} />}</label>
-              <select className="wd-select" value={form.fit} onChange={e => set('fit', e.target.value)}>
-                <option value="">Select fit</option>
-                {FITS.map(f => <option key={f} value={f}>{cap(f)}</option>)}
-              </select>
-            </div>
-
-            {/* Sleeve length */}
-            <div className="wd-field">
-              <label className="wd-label">Sleeve Length <span className="wd-opt">(optional)</span>{aiSuggested.has('sleeveLength') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.sleeveLength} />}</label>
-              <select className="wd-select" value={form.sleeveLength} onChange={e => set('sleeveLength', e.target.value)}>
-                <option value="">Select sleeve length</option>
-                {SLEEVE_LENGTHS.map(s => <option key={s} value={s}>{cap(s)}</option>)}
-              </select>
-            </div>
-
-            {/* Material guess */}
-            <div className="wd-field">
-              <label className="wd-label">Material <span className="wd-opt">(optional)</span>{aiSuggested.has('materialGuess') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.materialGuess} />}</label>
-              <input className="wd-input" placeholder="e.g. Cotton, Denim, Chiffon"
-                value={form.materialGuess} onChange={e => set('materialGuess', e.target.value)} />
-            </div>
-
-            {/* Style tags */}
-            <div className="wd-field wd-field--full">
-              <label className="wd-label">Style Tags <span className="wd-opt">(optional)</span>{aiSuggested.has('styleTags') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.styleTags} />}</label>
-              <div className="wd-chips">
-                {STYLE_TAG_OPTS.map(s => (
-                  <button type="button" key={s}
-                    className={`wd-chip ${form.styleTags.includes(s) ? 'wd-chip--on' : ''}`}
-                    onClick={() => toggleChip('styleTags', s)}>{cap(s)}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Suitable seasons */}
-            <div className="wd-field wd-field--full">
-              <label className="wd-label">Suitable Seasons <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableSeasons') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.suitableSeasons} />}</label>
-              <div className="wd-chips">
-                {['winter','spring','monsoon','autumn','all'].map(s => (
-                  <button type="button" key={s}
-                    className={`wd-chip wd-chip--season ${form.suitableSeasons.includes(s) ? 'wd-chip--on' : ''}`}
-                    onClick={() => toggleChip('suitableSeasons', s)}>{cap(s)}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Suitable occasions */}
-            <div className="wd-field wd-field--full">
-              <label className="wd-label">Suitable Occasions <span className="wd-opt">(optional)</span>{aiSuggested.has('suitableOccasions') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.suitableOccasions} />}</label>
-              <div className="wd-chips">
-                {OCCASIONS.map(o => (
-                  <button type="button" key={o}
-                    className={`wd-chip ${form.suitableOccasions.includes(o) ? 'wd-chip--on' : ''}`}
-                    onClick={() => toggleChip('suitableOccasions', o)}>{cap(o)}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Neckline */}
-            <div className="wd-field">
-              <label className="wd-label">Neckline <span className="wd-opt">(optional)</span>{aiSuggested.has('neckline') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.neckline} />}</label>
-              <select className="wd-select" value={form.neckline} onChange={e => set('neckline', e.target.value)}>
-                <option value="">Select neckline</option>
-                {NECKLINES.map(n => <option key={n} value={n}>{cap(n)}</option>)}
-              </select>
-            </div>
-
-            {/* Gender category */}
-            <div className="wd-field">
-              <label className="wd-label">Gender <span className="wd-opt">(optional)</span>{aiSuggested.has('genderCategory') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.genderCategory} />}</label>
-              <select className="wd-select" value={form.genderCategory} onChange={e => set('genderCategory', e.target.value)}>
-                <option value="">Select gender</option>
-                {GENDERS.map(g => <option key={g} value={g}>{cap(g)}</option>)}
-              </select>
-            </div>
-
-            {/* Additional details */}
-            <div className="wd-field wd-field--full">
-              <label className="wd-label">Additional Details <span className="wd-opt">(optional)</span>{aiSuggested.has('details') && <AiBadge confidence={form.aiMeta?.fieldConfidence?.details} />}</label>
-              <div className="wd-chips">
-                {DETAIL_FLAGS.map(({ key, label }) => (
-                  <button type="button" key={key}
-                    className={`wd-chip ${form.details?.[key] ? 'wd-chip--on' : ''}`}
-                    onClick={() => toggleDetail(key)}>{label}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="wd-field wd-field--full">
-              <label className="wd-label">Notes <span className="wd-opt">(optional)</span></label>
-              <textarea className="wd-textarea" rows={2}
-                placeholder="Any special notes about this item…"
-                value={form.notes} onChange={e => set('notes', e.target.value)} />
-            </div>
+            <MetadataFields form={form} set={set} toggleChip={toggleChip} toggleDetail={toggleDetail} aiSuggested={aiSuggested} category={form.category} />
 
           </div>
         </div>
@@ -744,6 +848,307 @@ function ItemModal({ item, onClose, onSave }) {
               ? <><span className="wd-spin" />{uploading ? `Uploading ${uploadPct}%…` : analyzing ? 'Tagging with AI…' : 'Saving…'}</>
               : <><Ic d={I.save} size={14} />{isEdit ? 'Save Changes' : 'Add to Wardrobe'}</>}
           </button>
+        </div>
+
+      </div>
+    </>
+  );
+}
+
+// Fast 2-step add flow, shared by both "+ Add Clothing" (Top/Bottom/Dress)
+// and "+ Add Footwear/Accessory": Step 1 (image + category) → Step 2
+// (occasion + Generate with AI) → a review screen where every AI-detected
+// field is pre-filled and editable via the same AiBadge/mergeMeta machinery
+// ItemModal uses. `categoryOptions` picks which category chips Step 1 shows;
+// everything else (occasion, AI analysis, review fields) is identical
+// regardless of item type — the vision AI already returns null/not-applicable
+// for fields a shoe or bag doesn't have (sleeve length, neckline, etc.).
+function FastAddModal({ onClose, onSave, categoryOptions = CLOTHING_CATEGORIES, title = 'Add Clothing' }) {
+  const [step, setStep] = useState('category'); // 'category' | 'occasion' | 'review'
+  const [category, setCategory] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
+  const [publicId, setPublicId] = useState('');
+  const [occasion, setOccasionVal] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadError, setUploadError] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiBanner, setAiBanner] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [form, setFormState] = useState({ ...EMPTY_FORM });
+  const [aiSuggested, setAiSuggested] = useState(new Set());
+
+  const set = (k, v) => {
+    setFormState(f => ({ ...f, [k]: v }));
+    setAiSuggested(prev => { if (!prev.has(k)) return prev; const next = new Set(prev); next.delete(k); return next; });
+  };
+
+  const toggleChip = (k, val) => {
+    setFormState(f => {
+      const arr = f[k] || [];
+      return { ...f, [k]: arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val] };
+    });
+    setAiSuggested(prev => { if (!prev.has(k)) return prev; const next = new Set(prev); next.delete(k); return next; });
+  };
+
+  const toggleDetail = (flag) => {
+    setFormState(f => ({ ...f, details: { ...f.details, [flag]: !f.details?.[flag] } }));
+    setAiSuggested(prev => { if (!prev.has('details')) return prev; const next = new Set(prev); next.delete('details'); return next; });
+  };
+
+  const handleImageChange = (file) => {
+    setImageFile(file);
+    setImageUrl('');
+    setPublicId('');
+    setUploadError('');
+  };
+
+  const goToOccasionStep = async () => {
+    if (!imageFile || !category) return;
+    if (imageUrl) { // already uploaded (e.g. came back via "Back" without picking a new photo)
+      setFormState(f => ({ ...f, category }));
+      setStep('occasion');
+      return;
+    }
+    setUploading(true);
+    setUploadPct(0);
+    setUploadError('');
+    try {
+      const { imageUrl: url, publicId: pid } = await uploadWardrobeImage(imageFile, {
+        folder: 'styleai/wardrobe',
+        onProgress: setUploadPct,
+      });
+      setImageUrl(url);
+      setPublicId(pid);
+      setFormState(f => ({ ...f, imageUrl: url, publicId: pid, category }));
+      setStep('occasion');
+    } catch (err) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const generateWithAI = async () => {
+    if (!occasion) { setErrors({ occasion: 'Occasion is required' }); return; }
+    setErrors({});
+    setAnalyzing(true);
+    setAiBanner('');
+    try {
+      const { data } = await api.post('/wardrobe/analyze', { imageUrl, category });
+      const meta = data.meta || null;
+      if (meta) {
+        const suggestedName  = [meta.colorNames?.[0], meta.subcategory || category].filter(Boolean).map(cap).join(' ');
+        const suggestedColor = (meta.colorNames || []).map(cap).join(', ');
+        setFormState(f => ({
+          ...f,
+          occasion,
+          name: suggestedName,
+          color: suggestedColor,
+          subcategory:       meta.subcategory       || '',
+          pattern:           meta.pattern           || '',
+          fit:               meta.fit               || '',
+          sleeveLength:      meta.sleeveLength      || '',
+          materialGuess:     meta.materialGuess     || '',
+          styleTags:         meta.styleTags         || [],
+          suitableSeasons:   meta.suitableSeasons   || [],
+          suitableOccasions: meta.suitableOccasions || [],
+          colorHex:          meta.colorHex          || [],
+          formalityLevel:    meta.formalityLevel,
+          layeringLevel:     meta.layeringLevel     || '',
+          accessoryCompatibility: meta.accessoryCompatibility || [],
+          neckline:          meta.neckline          || '',
+          genderCategory:    meta.genderCategory    || '',
+          details:           meta.details ? { ...EMPTY_DETAILS, ...meta.details } : { ...EMPTY_DETAILS },
+          isCompleteOutfit:  meta.isCompleteOutfit   || false,
+          texture:            meta.texture            || '',
+          silhouette:         meta.silhouette         || '',
+          weatherSuitability: meta.weatherSuitability || '',
+          culturalCategory:   meta.culturalCategory   || '',
+          aiMeta:            meta.aiMeta,
+        }));
+        setAiSuggested(new Set([
+          ...(meta.unverifiedFields || []),
+          ...(suggestedName  ? ['name']  : []),
+          ...(suggestedColor ? ['color'] : []),
+        ]));
+        if (meta.aiMeta && !meta.aiMeta.visionAvailable) {
+          setAiBanner('AI tagging unavailable right now — colors were detected automatically, please fill in the rest below.');
+        }
+      } else {
+        setFormState(f => ({ ...f, occasion }));
+        setAiBanner('AI tagging is temporarily unavailable — please fill in the details manually.');
+      }
+    } catch {
+      setFormState(f => ({ ...f, occasion }));
+      setAiBanner('AI tagging is temporarily unavailable — please fill in the details manually.');
+    }
+    setAnalyzing(false);
+    setStep('review');
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!form.name.trim())  e.name  = 'Outfit name is required';
+    if (!form.color.trim()) e.color = 'Color is required';
+    setErrors(e);
+    return !Object.keys(e).length;
+  };
+
+  const handleSave = async () => {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const finalForm = {
+        ...form,
+        category, occasion, imageUrl, publicId,
+        unverifiedFields: Array.from(aiSuggested),
+      };
+      await onSave(finalForm);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loading = uploading || saving || analyzing;
+
+  return (
+    <>
+      <div className="wd-modal-bg" onClick={onClose} />
+      <div className="wd-modal" role="dialog" aria-modal="true" aria-label={title}>
+
+        <div className="wd-modal-hd">
+          <div className="wd-modal-hd-left">
+            <div className="wd-modal-icon"><Ic d={I.hanger} size={18} /></div>
+            <div>
+              <h2 className="wd-modal-title">{title}</h2>
+              <p className="wd-modal-sub">
+                {step === 'category' && 'Step 1 of 2 — Photo & category'}
+                {step === 'occasion' && 'Step 2 of 2 — Occasion'}
+                {step === 'review'   && 'Review AI-detected details'}
+              </p>
+            </div>
+          </div>
+          <button className="wd-icon-btn" onClick={onClose} disabled={loading} aria-label="Close">
+            <Ic d={I.close} size={16} />
+          </button>
+        </div>
+
+        <div className="wd-modal-body">
+          {step === 'category' && (
+            <div className="wd-form-grid">
+              <div className="wd-field wd-field--full">
+                <label className="wd-label">Outfit Image <span className="wd-req">*</span></label>
+                <ImageUploader existingUrl="" onFileChange={handleImageChange} uploadError={uploadError} />
+                {uploading && (
+                  <div className="wd-progress">
+                    <div className="wd-progress-bar" style={{ width: `${uploadPct}%` }} />
+                    <span className="wd-progress-txt">Uploading… {uploadPct}%</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="wd-field wd-field--full">
+                <label className="wd-label">Category <span className="wd-req">*</span></label>
+                <div className="wd-chips">
+                  {categoryOptions.map(c => (
+                    <button type="button" key={c}
+                      className={`wd-chip wd-chip--cat ${category === c ? 'wd-chip--on' : ''}`}
+                      onClick={() => setCategory(c)}>
+                      {CAT_META[c].icon} {CAT_META[c].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'occasion' && (
+            <div className="wd-form-grid">
+              <div className="wd-field wd-field--full">
+                <label className="wd-label">Occasion <span className="wd-req">*</span></label>
+                <select className={`wd-select ${errors.occasion ? 'wd-input--err' : ''}`} value={occasion}
+                  onChange={e => setOccasionVal(e.target.value)}>
+                  <option value="">Select occasion</option>
+                  {OCCASIONS.map(o => <option key={o} value={o}>{OCCASION_LABELS[o] || cap(o)}</option>)}
+                </select>
+                {errors.occasion && <span className="wd-field-err">{errors.occasion}</span>}
+                <p className="wd-hint">
+                  The occasion you'd normally wear this for — used to keep this item out of
+                  mismatched recommendations (e.g. a wedding outfit will never be suggested for a casual day).
+                </p>
+              </div>
+              {analyzing && (
+                <div className="wd-field wd-field--full wd-progress">
+                  <div className="wd-progress-bar" style={{ width: '100%' }} />
+                  <span className="wd-progress-txt">✨ AI is analyzing your item…</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 'review' && (
+            <div className="wd-form-grid">
+              {aiBanner && <p className="wd-field-err wd-field--full" style={{ color: 'var(--wd-primary)' }}>{aiBanner}</p>}
+
+              <div className="wd-field wd-field--full">
+                <label className="wd-label">
+                  Outfit Name <span className="wd-req">*</span>{aiSuggested.has('name') && <AiBadge />}
+                </label>
+                <input className={`wd-input ${errors.name ? 'wd-input--err' : ''}`}
+                  value={form.name} onChange={e => set('name', e.target.value)} />
+                {errors.name && <span className="wd-field-err">{errors.name}</span>}
+              </div>
+
+              <div className="wd-field">
+                <label className="wd-label">
+                  Color <span className="wd-req">*</span>{aiSuggested.has('color') && <AiBadge />}
+                </label>
+                <input className={`wd-input ${errors.color ? 'wd-input--err' : ''}`}
+                  value={form.color} onChange={e => set('color', e.target.value)} />
+                {errors.color && <span className="wd-field-err">{errors.color}</span>}
+              </div>
+
+              <div className="wd-field">
+                <label className="wd-label">Season <span className="wd-opt">(optional)</span></label>
+                <select className="wd-select" value={form.season} onChange={e => set('season', e.target.value)}>
+                  <option value="">Select season</option>
+                  {SEASONS.map(s => <option key={s} value={s}>{cap(s)}</option>)}
+                </select>
+              </div>
+
+              <MetadataFields form={form} set={set} toggleChip={toggleChip} toggleDetail={toggleDetail} aiSuggested={aiSuggested} category={category} />
+            </div>
+          )}
+        </div>
+
+        <div className="wd-modal-ft">
+          {step === 'category' && (
+            <>
+              <button className="wd-btn wd-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
+              <button className="wd-btn wd-btn--primary" onClick={goToOccasionStep} disabled={loading || !imageFile || !category}>
+                {uploading ? <><span className="wd-spin" />Uploading {uploadPct}%…</> : 'Next'}
+              </button>
+            </>
+          )}
+          {step === 'occasion' && (
+            <>
+              <button className="wd-btn wd-btn--ghost" onClick={() => setStep('category')} disabled={loading}>Back</button>
+              <button className="wd-btn wd-btn--primary" onClick={generateWithAI} disabled={loading || !occasion}>
+                {analyzing ? <><span className="wd-spin" />Tagging with AI…</> : <><Ic d={I.wand} size={14} />Generate with AI</>}
+              </button>
+            </>
+          )}
+          {step === 'review' && (
+            <>
+              <button className="wd-btn wd-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
+              <button className="wd-btn wd-btn--primary" onClick={handleSave} disabled={loading}>
+                {saving ? <><span className="wd-spin" />Saving…</> : <><Ic d={I.save} size={14} />Add to Wardrobe</>}
+              </button>
+            </>
+          )}
         </div>
 
       </div>
@@ -826,7 +1231,7 @@ export default function Wardrobe({ onMixMatch } = {}) {
   const [view,         setView]         = useState('grid');
   const [sortBy,       setSortBy]       = useState('createdAt:desc');
 
-  const [addModal, setAddModal] = useState(false);
+  const [addMode,  setAddMode]  = useState(null); // null | 'clothing' | 'footwear'
   const [editItem, setEditItem] = useState(null);
   const [delItem,  setDelItem]  = useState(null);
   const [toast,    setToast]    = useState(null);
@@ -864,7 +1269,7 @@ export default function Wardrobe({ onMixMatch } = {}) {
       const { data } = await api.post('/wardrobe', form);
       setItems(prev => [data.item, ...prev]);
       setStats(s => ({ ...s, total: s.total + 1 }));
-      setAddModal(false);
+      setAddMode(null);
       showToast('Item added to wardrobe!');
     } catch { showToast('Failed to add item.', 'error'); }
   };
@@ -918,8 +1323,11 @@ export default function Wardrobe({ onMixMatch } = {}) {
             </div>
           </div>
           <div className="wd-banner-acts">
-            <button className="wd-btn-add" onClick={() => setAddModal(true)}>
-              <Ic d={I.plus} size={15} /> Add Item
+            <button className="wd-btn-add wd-btn-add--ghost" onClick={() => setAddMode('footwear')}>
+              <Ic d={I.plus} size={15} /> Add Footwear/Accessory
+            </button>
+            <button className="wd-btn-add" onClick={() => setAddMode('clothing')}>
+              <Ic d={I.plus} size={15} /> Add Clothing
             </button>
           </div>
         </div>
@@ -1040,7 +1448,7 @@ export default function Wardrobe({ onMixMatch } = {}) {
           </p>
           {hasFilters
             ? <button className="wd-btn wd-btn--ghost" style={{ marginTop: 16 }} onClick={clearAll}>Clear Filters</button>
-            : <button className="wd-btn-add" style={{ marginTop: 20 }} onClick={() => setAddModal(true)}>
+            : <button className="wd-btn-add" style={{ marginTop: 20 }} onClick={() => setAddMode('clothing')}>
                 <Ic d={I.plus} size={15} /> Add Your First Outfit
               </button>
           }
@@ -1049,8 +1457,8 @@ export default function Wardrobe({ onMixMatch } = {}) {
       ) : view === 'grid' ? (
         /* Grid view */
         <div className="wd-grid">
-          <div className="wd-add-card" onClick={() => setAddModal(true)}
-            role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setAddModal(true)}>
+          <div className="wd-add-card" onClick={() => setAddMode('clothing')}
+            role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setAddMode('clothing')}>
             <div className="wd-add-inner">
               <div className="wd-add-icon-wrap"><Ic d={I.plus} size={24} /></div>
               <p>Add Outfit</p>
@@ -1131,7 +1539,14 @@ export default function Wardrobe({ onMixMatch } = {}) {
       )}
 
       {/* Modals */}
-      {addModal && <ItemModal onClose={() => setAddModal(false)} onSave={handleCreate} />}
+      {addMode === 'clothing' && (
+        <FastAddModal categoryOptions={CLOTHING_CATEGORIES} title="Add Clothing"
+          onClose={() => setAddMode(null)} onSave={handleCreate} />
+      )}
+      {addMode === 'footwear' && (
+        <FastAddModal categoryOptions={FOOTWEAR_ACCESSORY_CATEGORIES} title="Add Footwear / Accessory"
+          onClose={() => setAddMode(null)} onSave={handleCreate} />
+      )}
       {editItem  && <ItemModal item={editItem} onClose={() => setEditItem(null)} onSave={handleUpdate} />}
       {delItem   && <DeleteModal item={delItem} onClose={() => setDelItem(null)} onConfirm={handleDelete} />}
     </div>

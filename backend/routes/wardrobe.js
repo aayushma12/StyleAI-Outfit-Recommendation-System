@@ -5,10 +5,11 @@ const { protect } = require('../middleware/auth');
 const validateObjectId = require('../middleware/validateObjectId');
 const ctrl = require('../controllers/wardrobeController');
 const { isAllowedImageUrl } = require('../utils/urlSafety');
+const { OCCASIONS } = require('../constants/occasions');
 
 const checkId = validateObjectId('id');
 
-const CATEGORIES = ['tops', 'bottoms', 'dresses', 'jackets', 'footwear', 'accessories', 'traditional'];
+const CATEGORIES = ['tops', 'bottoms', 'dresses', 'footwear', 'accessories'];
 
 const checkValidation = (req, res, next) => {
   const errors = validationResult(req);
@@ -23,7 +24,7 @@ const validateItemCreateBody = [
   body('name').trim().notEmpty().withMessage('Item name is required.').isLength({ max: 100 }),
   body('category').trim().isIn(CATEGORIES).withMessage(`category must be one of: ${CATEGORIES.join(', ')}`),
   body('color').trim().notEmpty().withMessage('Color is required.').isLength({ max: 50 }),
-  body('occasion').optional({ checkFalsy: true }).trim().isLength({ max: 60 }),
+  body('occasion').trim().notEmpty().withMessage('Occasion is required.').isIn(OCCASIONS).withMessage(`occasion must be one of: ${OCCASIONS.join(', ')}`),
   body('season').optional({ checkFalsy: true }).trim().isLength({ max: 30 }),
   body('notes').optional({ checkFalsy: true }).trim().isLength({ max: 300 }),
   body('imageUrl').optional({ checkFalsy: true }).trim()
@@ -35,7 +36,7 @@ const validateItemUpdateBody = [
   body('name').optional({ checkFalsy: true }).trim().notEmpty().isLength({ max: 100 }),
   body('category').optional({ checkFalsy: true }).trim().isIn(CATEGORIES).withMessage(`category must be one of: ${CATEGORIES.join(', ')}`),
   body('color').optional({ checkFalsy: true }).trim().notEmpty().isLength({ max: 50 }),
-  body('occasion').optional({ checkFalsy: true }).trim().isLength({ max: 60 }),
+  body('occasion').optional({ checkFalsy: true }).trim().isIn(OCCASIONS).withMessage(`occasion must be one of: ${OCCASIONS.join(', ')}`),
   body('season').optional({ checkFalsy: true }).trim().isLength({ max: 30 }),
   body('notes').optional({ checkFalsy: true }).trim().isLength({ max: 300 }),
   body('imageUrl').optional({ checkFalsy: true }).trim()

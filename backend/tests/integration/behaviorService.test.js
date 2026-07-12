@@ -2,7 +2,7 @@
 
 const mongoose = require('mongoose');
 const BehaviorLog = require('../../models/BehaviorLog');
-const { getNegativeSignals, getUserInsights, logBehavior } = require('../../services/behaviorService');
+const { getNegativeSignals, getUserInsights, logBehavior, getRecentlyRecommendedItemIds } = require('../../services/behaviorService');
 
 function mkUserId() {
   return new mongoose.Types.ObjectId();
@@ -58,5 +58,42 @@ describe('behaviorService.getUserInsights', () => {
     });
     const insights = await getUserInsights(userId);
     expect(insights.totalInteractions).toBeGreaterThan(0);
+  });
+});
+
+describe('behaviorService.getRecentlyRecommendedItemIds', () => {
+  test('picks up recommendation_save and outfit_save, not just recommendation_accept (regression: saved-only outfits used to never count toward "don\'t repeat this")', async () => {
+    const userId = mkUserId();
+    const acceptedId = mkUserId(), savedId = mkUserId(), calendarId = mkUserId();
+
+    await logBehavior(userId, 'recommendation_accept', { metadata: { itemIds: [acceptedId] } });
+    await logBehavior(userId, 'recommendation_save',   { metadata: { itemIds: [savedId] } });
+    await logBehavior(userId, 'outfit_save',           { metadata: { itemIds: [calendarId] } }); // e.g. scheduled onto the calendar
+
+    const ids = await getRecentlyRecommendedItemIds(userId, 30);
+
+    expect(ids.has(acceptedId.toString())).toBe(true);
+    expect(ids.has(savedId.toString())).toBe(true);
+    expect(ids.has(calendarId.toString())).toBe(true);
+  });
+
+  test('ignores rejections and events outside the window', async () => {
+    const userId = mkUserId();
+    const rejectedId = mkUserId(), staleId = mkUserId();
+
+    await logBehavior(userId, 'recommendation_reject', { metadata: { itemIds: [rejectedId] } });
+    await logBehavior(userId, 'recommendation_save', { metadata: { itemIds: [staleId] } });
+    // Mongoose's `timestamps: true` silently strips createdAt from a
+    // Model.updateOne() $set (by design, to keep createdAt immutable after
+    // creation) — bypass via the raw driver collection to actually backdate it.
+    await BehaviorLog.collection.updateOne(
+      { user: userId, 'metadata.itemIds': staleId },
+      { $set: { createdAt: new Date(Date.now() - 45 * 86400000) } }
+    );
+
+    const ids = await getRecentlyRecommendedItemIds(userId, 30);
+
+    expect(ids.has(rejectedId.toString())).toBe(false);
+    expect(ids.has(staleId.toString())).toBe(false);
   });
 });

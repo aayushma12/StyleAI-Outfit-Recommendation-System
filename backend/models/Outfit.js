@@ -18,6 +18,12 @@ const outfitSchema = new mongoose.Schema({
   price:     { type: Number, min: 0, default: null },
   imageUrl:  { type: String, trim: true, default: '' },
   publicId:  { type: String, trim: true, default: '' },
+  // True only when a human confirmed this exact photo shows this exact item —
+  // via a real upload (auto-true) or an explicit manual-URL confirmation
+  // checkbox (opt-in). Recommendation.populateAndSanitize() strips imageUrl
+  // from any response where this isn't true, so consumers never see an
+  // unverified/mismatched photo — see backend/models/Recommendation.js.
+  imageVerified: { type: Boolean, default: false },
   tags:      [{ type: String, trim: true }],
   isApproved: { type: Boolean, default: true },
   isActive:   { type: Boolean, default: true },

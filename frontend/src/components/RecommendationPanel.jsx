@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { DislikeReasonModal } from './DislikeReasonModal';
 import { XAIPanel } from './XAIPanel';
 import { getMatchBadge } from '../utils/confidenceScale';
 import './RecommendationPanel.css';
-const SmartRecommendationWizard = lazy(() => import('./SmartRecommendationWizard'));
 
 const Ic = ({ d, size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -15,7 +14,6 @@ const Ic = ({ d, size = 16 }) => (
 
 const I = {
   sparkle:   'M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z',
-  refresh:   'M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15',
   check:     'M20 6L9 17l-5-5',
   heart:     'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z',
   x:         'M18 6L6 18M6 6l12 12',
@@ -29,7 +27,6 @@ const I = {
   wardrobe:  'M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.86H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.86l.58-3.57a2 2 0 00-1.34-2.23z',
   chev_down: 'M6 9l6 6 6-6',
   chev_up:   'M18 15l-6-6-6 6',
-  wand:      'M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8L19 13M15 9h0M17.8 6.2L19 5M3 21l9-9M12.2 6.2L11 5',
 };
 
 const SLOT_META = {
@@ -47,21 +44,6 @@ const SLOT_META = {
   sunglasses:     { label: 'Sunglasses',     emoji: '🕶️' },
   hair_accessory: { label: 'Hair Accessory', emoji: '📌' },
 };
-
-const OCCASION_OPTIONS = [
-  { value: 'daily',    label: 'Daily Wear' },
-  { value: 'college',  label: 'College' },
-  { value: 'office',   label: 'Office / Work' },
-  { value: 'casual',   label: 'Casual Outing' },
-  { value: 'cafe',     label: 'Café / Brunch' },
-  { value: 'date',     label: 'Date Night' },
-  { value: 'party',    label: 'Party' },
-  { value: 'festival', label: 'Festival / Pooja' },
-  { value: 'wedding',  label: 'Wedding' },
-  { value: 'gym',      label: 'Gym / Sports' },
-  { value: 'travel',   label: 'Travel' },
-  { value: 'formal',   label: 'Formal Event' },
-];
 
 function StarRating({ value, onChange, disabled }) {
   const [hover, setHover] = useState(0);
@@ -84,13 +66,15 @@ function StarRating({ value, onChange, disabled }) {
 
 function OutfitSlotRow({ slot, data }) {
   if (!data) return null;
-  const hasName = !!(data.name || data.item || data.suggestion);
+  const hasName = !!(data.name || data.item || data.suggestion || data.suggestedItem);
   if (!hasName) return null;
 
   const meta        = SLOT_META[slot] || { label: slot, emoji: '✨' };
   const isOwned     = !!data.item;
-  const isSuggested = !isOwned && !!data.suggestion;
-  const displayName = data.name || data.item?.name || data.suggestion;
+  const isCatalog   = !isOwned && !!data.suggestedItem;
+  const isSuggested = !isOwned && !!(data.suggestion || data.suggestedItem);
+  const displayName = data.name || data.item?.name || data.suggestedItem?.name || data.suggestion;
+  const imageUrl    = data.item?.imageUrl || data.suggestedItem?.imageUrl;
 
   return (
     <div className={`rp-slot${isSuggested ? ' rp-slot--ext' : ''}`}>
@@ -100,14 +84,15 @@ function OutfitSlotRow({ slot, data }) {
       <div className="rp-slot-body">
         <div className="rp-slot-row1">
           <span className="rp-slot-cat">{meta.label}</span>
-          {isOwned    && <span className="rp-badge rp-badge--owned"><Ic d={I.check} size={9} /> In your wardrobe</span>}
-          {isSuggested && <span className="rp-badge rp-badge--ext">💡 Suggested</span>}
+          {isOwned    && <span className="rp-badge rp-badge--owned"><Ic d={I.check} size={9} /> From Your Wardrobe</span>}
+          {isCatalog  && <span className="rp-badge rp-badge--ext">🛍️ Suggested Addition</span>}
+          {isSuggested && !isCatalog && <span className="rp-badge rp-badge--ext">💡 Suggested</span>}
         </div>
         <div className="rp-slot-name">{displayName}</div>
         {data.reason && <div className="rp-slot-reason">{data.reason}</div>}
       </div>
-      {data.item?.imageUrl && (
-        <img src={data.item.imageUrl} alt={displayName} className="rp-slot-img" />
+      {imageUrl && (
+        <img src={imageUrl} alt={displayName} className="rp-slot-img" />
       )}
     </div>
   );
@@ -123,7 +108,7 @@ function RecCard({ rec, sessionId, onFeedbackSent, weatherContext, weights }) {
   const exp    = rec.explanation || {};
   const outfit = rec.outfit      || {};
 
-  const activeSlots = Object.entries(outfit).filter(([, d]) => d && (d.name || d.item || d.suggestion));
+  const activeSlots = Object.entries(outfit).filter(([, d]) => d && (d.name || d.item || d.suggestion || d.suggestedItem));
   const ownedCount  = activeSlots.filter(([, d]) => d.item).length;
   const match       = getMatchBadge(rec.confidence);
 
@@ -325,127 +310,14 @@ function RecCard({ rec, sessionId, onFeedbackSent, weatherContext, weights }) {
   );
 }
 
-/* ── Skeleton loader ──────────────────────────────────────────────────────── */
-function Skel({ w, h, r = 6 }) {
-  return <div className="rp-skel-block" style={{ width: w, height: h, borderRadius: r }} />;
-}
-
-const SKEL_STEPS = [
-  'Looking at your wardrobe…',
-  'Checking today\'s weather in Kathmandu…',
-  'Matching your style preferences…',
-  'Putting together outfit options…',
-  'Almost ready…',
-];
-
-function RecSkeleton() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setStep(s => (s + 1) % SKEL_STEPS.length), 1800);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="rp-skel-wrap">
-      <div className="rp-skel-tabs">
-        {[92, 80, 88, 76, 84].map((w, i) => (
-          <div key={i} className={`rp-skel-tab${i === 0 ? ' rp-skel-tab--active' : ''}`}>
-            <Skel w={22} h={22} r={11} />
-            <Skel w={w} h={9} />
-          </div>
-        ))}
-      </div>
-      <div className="rp-skel-card">
-        <div className="rp-skel-card-hd">
-          <Skel w={42} h={42} r={10} />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
-            <Skel w={80} h={10} />
-            <Skel w={180} h={18} />
-            <Skel w={130} h={9} />
-          </div>
-          <Skel w={90} h={28} r={20} />
-        </div>
-        <div className="rp-skel-pills">
-          <Skel w={110} h={22} r={11} />
-          <Skel w={170} h={22} r={11} />
-        </div>
-        <div className="rp-skel-slots">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="rp-skel-slot">
-              <Skel w={28} h={28} r={7} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <Skel w={50} h={9} />
-                <Skel w="85%" h={13} />
-                <Skel w="55%" h={9} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="rp-skel-msg">
-          <div className="rp-skel-spinner" />
-          <span key={step} className="rp-skel-step">{SKEL_STEPS[step]}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function GenerateForm({ onGenerate, loading }) {
-  const [occasion,     setOccasion]     = useState('daily');
-  const [mood,         setMood]         = useState('');
-  const [wardrobeOnly, setWardrobeOnly] = useState(false);
-  const [open,         setOpen]         = useState(false);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onGenerate({ occasion, mood, wardrobeOnly });
-    setOpen(false);
-  };
-
-  return (
-    <div className="rp-genform">
-      <button className="rp-genform-toggle" onClick={() => setOpen(p => !p)}>
-        <Ic d={I.wand} size={14} />
-        Customise my outfit
-        <Ic d={open ? I.chev_up : I.chev_down} size={13} />
-      </button>
-
-      {open && (
-        <form className="rp-genform-body" onSubmit={handleSubmit}>
-          <div className="rp-gf-field">
-            <label className="rp-gf-label">Where are you going?</label>
-            <select className="rp-gf-select" value={occasion} onChange={e => setOccasion(e.target.value)}>
-              {OCCASION_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="rp-gf-field">
-            <label className="rp-gf-label">Any vibe in mind? (optional)</label>
-            <input className="rp-gf-input" type="text" value={mood}
-              onChange={e => setMood(e.target.value)}
-              placeholder="e.g. comfortable, bold, elegant…"
-              maxLength={80} />
-          </div>
-          <label className="rp-gf-checkbox">
-            <input type="checkbox" checked={wardrobeOnly} onChange={e => setWardrobeOnly(e.target.checked)} />
-            Only use clothes I already own
-          </label>
-          <button type="submit" className="rp-gf-submit" disabled={loading}>
-            {loading ? <><span className="rp-spin" /> Finding outfits…</> : <><Ic d={I.sparkle} size={14} /> Find Outfits</>}
-          </button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-export default function RecommendationPanel() {
+// Pure results renderer — generation happens exclusively via the
+// SmartRecommendationWizard section rendered above this one on the
+// dashboard; this component just restores/displays whatever session exists
+// (the daily-cached one on mount, or a freshly generated one handed down
+// via the `newSession` prop when the wizard finishes).
+export default function RecommendationPanel({ newSession }) {
   const [session,    setSession]    = useState(null);
   const [activeTab,  setActiveTab]  = useState(0);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState('');
-  const [showWizard, setShowWizard] = useState(false);
   const [weights,    setWeights]    = useState(null);
   const [toast,      setToast]      = useState('');
 
@@ -460,24 +332,9 @@ export default function RecommendationPanel() {
       .catch(() => {});
   }, []);
 
-  const handleGenerate = useCallback(async (opts = {}) => {
-    setLoading(true);
-    setError('');
-    try {
-      const r = await api.post('/recommendations/generate', {
-        occasion:     opts.occasion     || 'daily',
-        mood:         opts.mood         || '',
-        wardrobeOnly: opts.wardrobeOnly || false,
-        requestedBy:  'user',
-      });
-      setSession(r.data.session);
-      setActiveTab(0);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Couldn\'t generate outfits. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    if (newSession) { setSession(newSession); setActiveTab(0); }
+  }, [newSession]);
 
   const recs      = session?.recommendations || [];
   const activeRec = recs[activeTab];
@@ -494,30 +351,16 @@ export default function RecommendationPanel() {
           <div>
             <div className="rp-panel-title">Your Outfit Recommendations</div>
             <div className="rp-panel-sub">
-              5 outfit options personalised just for you
+              {recs.length > 0 ? `${recs.length} outfit options personalised just for you` : 'Generated from your last request'}
             </div>
           </div>
         </div>
-        <div className="rp-panel-hd-right">
-          {session?.context?.weather?.temp && (
-            <div className="rp-pill rp-pill--wx" style={{ fontSize: '0.75rem' }}>
-              <Ic d={I.sun} size={12} />
-              {session.context.weather.temp}°C · {session.context.weather.condition}
-            </div>
-          )}
-          <button className="rp-gen-btn rp-gen-btn--wizard" onClick={() => setShowWizard(true)} disabled={loading}
-            title="Advanced wizard — describe exactly what you need">
-            <Ic d={I.wand} size={14} /> Advanced
-          </button>
-          <button className="rp-gen-btn" onClick={() => handleGenerate()} disabled={loading}>
-            {loading
-              ? <><span className="rp-spin" /> Finding outfits…</>
-              : session
-                ? <><Ic d={I.refresh} size={14} /> New outfits</>
-                : <><Ic d={I.sparkle} size={14} /> Get outfits</>
-            }
-          </button>
-        </div>
+        {session?.context?.weather?.temp && (
+          <div className="rp-pill rp-pill--wx" style={{ fontSize: '0.75rem' }}>
+            <Ic d={I.sun} size={12} />
+            {session.context.weather.temp}°C · {session.context.weather.condition}
+          </div>
+        )}
       </div>
 
       {/* Festival notice — shown only when relevant */}
@@ -527,29 +370,20 @@ export default function RecommendationPanel() {
         </div>
       )}
 
-      {error && <div className="rp-error">{error}</div>}
-
-      <GenerateForm onGenerate={handleGenerate} loading={loading} />
-
-      {loading && <RecSkeleton />}
-
       {/* Empty state */}
-      {!loading && !session && !error && (
+      {!session && (
         <div className="rp-empty">
           <div className="rp-empty-icon"><Ic d={I.sparkle} size={32} /></div>
-          <div className="rp-empty-title">Get Your Outfit Ideas</div>
+          <div className="rp-empty-title">No Recommendation Yet</div>
           <div className="rp-empty-text">
-            Tap the button and StyleAI will suggest 5 different outfit options from your wardrobe,
-            matched to today's weather and your personal style.
+            Tap "Generate Personalized Recommendation" above and StyleAI will build outfit
+            options from your wardrobe, matched to today's weather and your personal style.
           </div>
-          <button className="rp-empty-btn" onClick={() => handleGenerate()}>
-            <Ic d={I.sparkle} size={15} /> Show me outfits
-          </button>
         </div>
       )}
 
       {/* Recommendations */}
-      {!loading && recs.length > 0 && (
+      {recs.length > 0 && (
         <>
           {/* Tabs — emoji + label only, no confusing % numbers */}
           <div className="rp-tabs">
@@ -594,19 +428,6 @@ export default function RecommendationPanel() {
             {session.context?.occasion && <><span>·</span><span>{session.context.occasion}</span></>}
           </div>
         </>
-      )}
-
-      {showWizard && (
-        <Suspense fallback={null}>
-          <SmartRecommendationWizard
-            onClose={() => setShowWizard(false)}
-            onSessionReady={(wizardSession) => {
-              setSession(wizardSession);
-              setActiveTab(0);
-              setShowWizard(false);
-            }}
-          />
-        </Suspense>
       )}
     </div>
   );

@@ -36,28 +36,52 @@ const CATEGORY_TABS = [
   { key: 'jackets',     label: 'Outerwear'   },
   { key: 'footwear',    label: 'Footwear'    },
   { key: 'accessories', label: 'Accessories' },
-  { key: 'traditional', label: 'Traditional' },
 ];
 const TAB_CATEGORIES = {
   all:         null,
   tops:        ['tops'],
   bottoms:     ['bottoms'],
   dresses:     ['dresses'],
-  jackets:     ['jackets'],
   footwear:    ['footwear'],
   accessories: ['accessories'],
-  traditional: ['traditional', 'traditional wear'],
 };
 const CATEGORY_TO_LAYER = {
-  'tops':             'tops',
-  'bottoms':          'bottoms',
-  'dresses':          'dress',
-  'jackets':          'outerwear',
-  'footwear':         'footwear',
-  'accessories':      'accessories',
-  'traditional':      'traditional',
-  'traditional wear': 'traditional',
+  'tops':        'tops',
+  'bottoms':     'bottoms',
+  'dresses':     'dress',
+  'footwear':    'footwear',
+  'accessories': 'accessories',
+  // Defensive: a pre-migration document may briefly still carry the retired
+  // 'jackets' category value — never reachable for new writes.
+  'jackets':     'outerwear',
 };
+
+// 'jackets' was folded into 'tops' — a blazer/coat/cardigan uploaded under
+// category:'tops' still needs to resolve to the 'outerwear' layer for the
+// board/substitution logic below. Mirrors candidateGenerationService.js's
+// resolveSlot() fix on the backend so both surfaces agree on what counts as
+// outerwear.
+const OUTERWEAR_KW = /jacket|blazer|coat|cardigan|shrug|waistcoat|overcoat|windbreaker/;
+function resolveLayer(item) {
+  const cat = (item.category || '').toLowerCase();
+  if (cat === 'tops') {
+    const text = `${(item.subcategory || '').toLowerCase()} ${(item.name || '').toLowerCase()}`;
+    if (item.layeringLevel === 'outer' || OUTERWEAR_KW.test(text)) return 'outerwear';
+    return 'tops';
+  }
+  return CATEGORY_TO_LAYER[cat] || null;
+}
+
+// Tab-membership predicate — 'jackets' (labeled "Outerwear") and 'tops' both
+// draw from category:'tops', split by resolveLayer() rather than a plain
+// category-equality check.
+function matchesTab(item, tabKey) {
+  if (tabKey === 'all') return true;
+  if (tabKey === 'jackets') return resolveLayer(item) === 'outerwear';
+  if (tabKey === 'tops')    return (item.category || '').toLowerCase() === 'tops' && resolveLayer(item) !== 'outerwear';
+  const cats = TAB_CATEGORIES[tabKey] || [tabKey];
+  return cats.some(c => (item.category || '').toLowerCase() === c);
+}
 
 const LAYER_LIMITS = {
   tops:        2,   // base layer + 1 mid-layer (sweater, turtleneck, etc.)
@@ -164,13 +188,6 @@ function computeScores(map) {
   const overall = Math.round(color * 0.30 + season * 0.20 + occ * 0.20 + comp * 0.30);
   return { color, season, occasion: occ, completeness: comp, overall };
 }
-// Layer -> which wardrobe categories qualify as a substitution candidate for
-// that layer (mirrors CATEGORY_TO_LAYER's mapping, keyed the other way).
-const LAYER_TO_CATEGORIES = {
-  tops: ['tops'], bottoms: ['bottoms'], dress: ['dresses'], outerwear: ['jackets'],
-  footwear: ['footwear'], accessories: ['accessories'], traditional: ['traditional', 'traditional wear'],
-};
-
 // Real substitution suggestions — not generic tips. For each filled layer,
 // tries swapping in every other wardrobe item of the same category (in
 // place of that layer's last-added item) and keeps whichever swap improves
@@ -183,9 +200,8 @@ function computeSubstitutionSuggestions(map, allItems) {
   const suggestions = [];
   for (const [layer, selected] of Object.entries(map)) {
     if (!selected.length) continue;
-    const categories = LAYER_TO_CATEGORIES[layer] || [];
     const candidates = allItems.filter(i =>
-      categories.includes((i.category || '').toLowerCase()) &&
+      resolveLayer(i) === layer &&
       !selected.some(s => s._id === i._id)
     );
     if (!candidates.length) continue;
@@ -461,15 +477,14 @@ function OutfitBoard({ map, onRemove, onJumpToTab }) {
             </div>
           )}
 
-          {/* Alt: Dress / Traditional links when nothing selected */}
+          {/* Alt: Dress link when nothing selected — sarees, lehengas, and other
+              complete traditional sets are tagged as Dresses, not a separate
+              category. */}
           {!hasFull && map.tops.length === 0 && map.bottoms.length === 0 && (
             <div className="ob-bsec-alt">
               <span className="ob-bsec-alt-or">or browse full-body:</span>
               <button className="ob-bsec-alt-btn" onClick={() => onJumpToTab('dresses')}>
-                Dresses
-              </button>
-              <button className="ob-bsec-alt-btn" onClick={() => onJumpToTab('traditional')}>
-                Traditional Wear
+                Dresses &amp; Traditional Sets
               </button>
             </div>
           )}
@@ -571,8 +586,7 @@ function WardrobePanel({ items, map, onSelect, loading, activeTab, setActiveTab 
   const filtered = useMemo(() => {
     let list = items;
     if (activeTab !== 'all') {
-      const cats = TAB_CATEGORIES[activeTab] || [activeTab];
-      list = items.filter(i => cats.some(c => (i.category || '').toLowerCase() === c));
+      list = items.filter(i => matchesTab(i, activeTab));
     }
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -593,13 +607,12 @@ function WardrobePanel({ items, map, onSelect, loading, activeTab, setActiveTab 
 
   const count = key => {
     if (key === 'all') return items.length;
-    const cats = TAB_CATEGORIES[key] || [key];
-    return items.filter(i => cats.some(c => (i.category || '').toLowerCase() === c)).length;
+    return items.filter(i => matchesTab(i, key)).length;
   };
 
   /* Does the layer for a given item still have room? */
   const canAdd = item => {
-    const layer = CATEGORY_TO_LAYER[(item.category || '').toLowerCase()];
+    const layer = resolveLayer(item);
     if (!layer) return false;
     if (selectedIds.has(item._id)) return true; // already selected = can toggle off
     const cur = (map[layer] || []).length;
@@ -655,7 +668,7 @@ function WardrobePanel({ items, map, onSelect, loading, activeTab, setActiveTab 
           <div className="ob-wd-grid">
             {filtered.map(item => {
               const sel     = selectedIds.has(item._id);
-              const layer   = CATEGORY_TO_LAYER[(item.category||'').toLowerCase()];
+              const layer   = resolveLayer(item);
               const meta    = LAYER_META[layer] || {};
               const full    = !canAdd(item) && !sel;
               return (
@@ -1055,7 +1068,7 @@ export default function OutfitBuilder() {
   useEffect(() => { fetchItems(); fetchSaved(); }, [fetchItems, fetchSaved]);
 
   const handleSelect = useCallback(item => {
-    const layer = CATEGORY_TO_LAYER[(item.category || '').toLowerCase()];
+    const layer = resolveLayer(item);
     if (!layer) return;
 
     setMap(prev => {
@@ -1159,7 +1172,7 @@ export default function OutfitBuilder() {
     setNotes(combo.notes || '');
     const nm = makeEmptyMap();
     (combo.items || []).filter(Boolean).forEach(item => {
-      const layer = CATEGORY_TO_LAYER[(item.category || '').toLowerCase()];
+      const layer = resolveLayer(item);
       if (!layer) return;
       const lim = LAYER_LIMITS[layer] || 1;
       if (nm[layer].length < lim && !nm[layer].some(i => i._id === item._id)) {
@@ -1179,7 +1192,7 @@ export default function OutfitBuilder() {
     setNotes(combo.notes || '');
     const nm = makeEmptyMap();
     (combo.items || []).filter(Boolean).forEach(item => {
-      const layer = CATEGORY_TO_LAYER[(item.category || '').toLowerCase()];
+      const layer = resolveLayer(item);
       if (!layer) return;
       const lim = LAYER_LIMITS[layer] || 1;
       if (nm[layer].length < lim && !nm[layer].some(i => i._id === item._id)) {

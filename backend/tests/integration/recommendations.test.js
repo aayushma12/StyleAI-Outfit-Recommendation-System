@@ -5,6 +5,7 @@ const app = require('../../app');
 const Recommendation = require('../../models/Recommendation');
 const WardrobeItem = require('../../models/WardrobeItem');
 const WardrobeCombo = require('../../models/WardrobeCombo');
+const Outfit = require('../../models/Outfit');
 
 async function registerAndGetToken(email) {
   const res = await request(app).post('/api/auth/register').send({
@@ -15,7 +16,7 @@ async function registerAndGetToken(email) {
 
 async function mkWardrobeItem(userId, overrides = {}) {
   return WardrobeItem.create({
-    user: userId, name: 'Test Top', category: 'tops', color: 'blue', ...overrides,
+    user: userId, name: 'Test Top', category: 'tops', color: 'blue', occasion: 'daily', ...overrides,
   });
 }
 
@@ -192,36 +193,40 @@ describe('POST /api/recommendations/:id/feedback — session-level adaptive re-r
   });
 });
 
-describe('POST /api/recommendations/wizard — wizard-only scoring dimensions', () => {
-  test('two sessions with identical wardrobe/occasion but different dresscode/vibe/budget produce different confidence', async () => {
+describe('POST /api/recommendations/wizard — 3-question flow (occasion, style, notes only)', () => {
+  test('generates a session from just occasion + style + extraNotes', async () => {
     const { token, userId } = await registerAndGetToken(`wizard-test-${Date.now()}-${Math.random()}@example.com`);
 
     await WardrobeItem.insertMany([
-      { user: userId, name: 'Blazer', category: 'jackets', color: 'black', colorHex: ['#111111'], occasion: 'office', formalityLevel: 4 },
+      { user: userId, name: 'Blazer', category: 'tops', color: 'black', colorHex: ['#111111'], occasion: 'office', formalityLevel: 4 },
       { user: userId, name: 'Trousers', category: 'bottoms', color: 'black', colorHex: ['#111111'], occasion: 'office', formalityLevel: 4 },
       { user: userId, name: 'Oxford Shoes', category: 'footwear', color: 'black', colorHex: ['#111111'], occasion: 'office', formalityLevel: 4 },
-      { user: userId, name: 'Gold Cufflinks', category: 'accessories', subcategory: 'jewelry', color: 'gold' },
+      { user: userId, name: 'Gold Cufflinks', category: 'accessories', subcategory: 'jewelry', color: 'gold', occasion: 'office' },
     ]);
 
-    const formal = await request(app).post('/api/recommendations/wizard')
+    const res = await request(app).post('/api/recommendations/wizard')
       .set('Authorization', `Bearer ${token}`)
-      .send({ occasion: 'office', dresscode: 'formal office attire', budget: 'luxury', indoorOutdoor: 'indoor', dayNight: 'day', vibe: 'Elegant' });
-    const casual = await request(app).post('/api/recommendations/wizard')
+      .send({ occasion: 'office', style: 'Smart Casual', extraNotes: 'Nothing synthetic please' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.session.recommendations.length).toBeGreaterThan(0);
+    expect(res.body.session.wizardContext).toMatchObject({ occasion: 'office', style: 'Smart Casual', extraNotes: 'Nothing synthetic please' });
+  });
+
+  test('budget/dresscode/vibe are no longer collectible from the wizard, so those scoring dimensions persist as null — same as a standard session', async () => {
+    const { token, userId } = await registerAndGetToken(`wizard-nulls-${Date.now()}-${Math.random()}@example.com`);
+    await mkWardrobeItem(userId, { name: 'Office Top', category: 'tops', occasion: 'office' });
+    await mkWardrobeItem(userId, { name: 'Office Bottom', category: 'bottoms', occasion: 'office' });
+
+    const res = await request(app).post('/api/recommendations/wizard')
       .set('Authorization', `Bearer ${token}`)
-      .send({ occasion: 'office', dresscode: 'casual weekend', budget: 'budget', indoorOutdoor: 'outdoor', dayNight: 'night', vibe: 'Sporty' });
+      .send({ occasion: 'office', style: 'Formal' });
 
-    expect(formal.status).toBe(200);
-    expect(casual.status).toBe(200);
-
-    const formalConfidence = formal.body.session.recommendations[0].confidence;
-    const casualConfidence = casual.body.session.recommendations[0].confidence;
-    expect(formalConfidence).not.toBe(casualConfidence);
-
-    // The persisted scores breakdown should carry the wizard-only dimensions.
-    const scores = formal.body.session.recommendations[0].scores;
-    expect(scores).toHaveProperty('dresscodeFit');
-    expect(scores).toHaveProperty('vibeMatch');
-    expect(scores).toHaveProperty('budgetFit');
+    expect(res.status).toBe(200);
+    const scores = res.body.session.recommendations[0].scores;
+    expect(scores.dresscodeFit).toBeNull();
+    expect(scores.vibeMatch).toBeNull();
+    expect(scores.budgetFit).toBeNull();
   });
 
   test('a standard (non-wizard) session never carries the wizard-only score keys', async () => {
@@ -241,5 +246,79 @@ describe('POST /api/recommendations/wizard — wizard-only scoring dimensions', 
     expect(scores.dresscodeFit).toBeNull();
     expect(scores.vibeMatch).toBeNull();
     expect(scores.budgetFit).toBeNull();
+  });
+});
+
+describe('Complete-outfit-set recognition (isCompleteOutfit) — end-to-end', () => {
+  test('a co-ord set explicitly tagged category:"tops" never gets recommended alongside a separate bottom', async () => {
+    const { token, userId } = await registerAndGetToken(`coord-set-${Date.now()}-${Math.random()}@example.com`);
+    await mkWardrobeItem(userId, {
+      name: 'Cream Co-ord Set', category: 'tops', color: 'cream',
+      isCompleteOutfit: true, occasion: 'daily', formalityLevel: 1,
+    });
+    await mkWardrobeItem(userId, { name: 'Blue Jeans', category: 'bottoms', color: 'blue', occasion: 'daily', formalityLevel: 1 });
+    await mkWardrobeItem(userId, { name: 'White Sneakers', category: 'footwear', color: 'white', occasion: 'daily', formalityLevel: 1 });
+
+    const res = await request(app).post('/api/recommendations/generate')
+      .set('Authorization', `Bearer ${token}`).send({ occasion: 'daily' });
+
+    expect(res.status).toBe(200);
+    for (const rec of res.body.session.recommendations) {
+      const outfit = rec.outfit;
+      const hasDress  = !!(outfit.dress?.name  || outfit.dress?.item);
+      const hasBottom = !!(outfit.bottom?.name || outfit.bottom?.item);
+      expect(hasDress && hasBottom).toBe(false);
+    }
+  });
+});
+
+describe('Recommendation.populateAndSanitize — never leaks an unverified catalog image', () => {
+  let userId;
+  beforeEach(async () => {
+    ({ userId } = await registerAndGetToken(`img-verify-${Date.now()}-${Math.random()}@example.com`));
+  });
+
+  test('strips imageUrl from an unverified suggestedItem but keeps it for a verified one', async () => {
+    const unverified = await Outfit.create({
+      name: 'Unverified Heels', category: 'footwear', imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/heels.jpg', imageVerified: false,
+    });
+    const verified = await Outfit.create({
+      name: 'Verified Bag', category: 'accessories', imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/bag.jpg', imageVerified: true,
+    });
+
+    const session = await Recommendation.create({
+      user: userId,
+      recommendations: [{
+        category: 'best_match', outfitName: 'Test', outfit: {
+          footwear: { suggestedItem: unverified._id, name: unverified.name },
+          bag:      { suggestedItem: verified._id,   name: verified.name },
+        },
+      }],
+    });
+
+    const sanitized = await Recommendation.populateAndSanitize(Recommendation.findById(session._id));
+
+    expect(sanitized.recommendations[0].outfit.footwear.suggestedItem.imageUrl).toBe('');
+    expect(sanitized.recommendations[0].outfit.bag.suggestedItem.imageUrl).toBe('https://res.cloudinary.com/demo/image/upload/v1/bag.jpg');
+  });
+
+  test('a real end-to-end /api/recommendations/generate response never contains an unverified image', async () => {
+    const { token } = await registerAndGetToken(`img-verify-e2e-${Date.now()}-${Math.random()}@example.com`);
+    await Outfit.create({
+      name: 'Unverified Office Heels', category: 'footwear', occasion: ['office'],
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/unverified.jpg', imageVerified: false,
+    });
+
+    const res = await request(app).post('/api/recommendations/generate')
+      .set('Authorization', `Bearer ${token}`).send({ occasion: 'office' });
+
+    expect(res.status).toBe(200);
+    for (const rec of res.body.session.recommendations) {
+      for (const slot of Object.values(rec.outfit)) {
+        if (slot?.suggestedItem && !slot.suggestedItem.imageVerified) {
+          expect(slot.suggestedItem.imageUrl).toBe('');
+        }
+      }
+    }
   });
 });

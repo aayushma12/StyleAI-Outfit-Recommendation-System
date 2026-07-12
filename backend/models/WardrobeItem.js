@@ -1,5 +1,6 @@
 'use strict';
 const mongoose = require('mongoose');
+const { OCCASIONS } = require('../constants/occasions');
 
 const wardrobeItemSchema = new mongoose.Schema({
   user:     { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -7,10 +8,10 @@ const wardrobeItemSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    enum: ['tops', 'bottoms', 'dresses', 'jackets', 'footwear', 'accessories', 'traditional'],
+    enum: ['tops', 'bottoms', 'dresses', 'footwear', 'accessories'],
   },
   color:    { type: String, required: true, trim: true },
-  occasion: { type: String, trim: true, default: '' },
+  occasion: { type: String, trim: true, required: true, enum: OCCASIONS },
   season:   { type: String, trim: true, default: '' },
   brand:    { type: String, trim: true, maxlength: 60, default: '' },
   size:     { type: String, trim: true, maxlength: 20, default: '' },
@@ -42,6 +43,12 @@ const wardrobeItemSchema = new mongoose.Schema({
     enum: ['base', 'mid', 'outer', 'one_piece', ''],
     default: '',
   },
+  // True for an item that, on its own, already forms a complete outfit and
+  // should never be paired with an extra top/bottom — sarees, lehenga sets,
+  // gowns, jumpsuits, kurta sets, and matching co-ord sets. Category-agnostic
+  // (unlike layeringLevel's 'one_piece', which the recommendation engine only
+  // trusts for category:'traditional' items) — see candidateGenerationService.js.
+  isCompleteOutfit: { type: Boolean, default: false },
   sleeveLength: {
     type: String, trim: true,
     enum: ['sleeveless', 'short', '3/4', 'long', ''],
@@ -65,6 +72,27 @@ const wardrobeItemSchema = new mongoose.Schema({
   genderCategory: {
     type: String, trim: true,
     enum: ['women', 'men', 'unisex', ''],
+    default: '',
+  },
+  texture: {
+    type: String, trim: true,
+    enum: ['smooth', 'ribbed', 'knit', 'woven', 'lace', 'sequined', 'embroidered', 'denim', 'leather', 'velvet', 'satin', 'other', ''],
+    default: '',
+  },
+  silhouette: {
+    type: String, trim: true,
+    enum: ['fitted', 'a_line', 'straight', 'flared', 'bodycon', 'oversized', 'wrap', 'asymmetric', 'other', ''],
+    default: '',
+  },
+  weatherSuitability: {
+    type: String, trim: true,
+    enum: ['hot', 'mild', 'cold', 'rainy', 'any', ''],
+    default: '',
+  },
+  // Informational/soft-scoring signal only — never a hard filter.
+  culturalCategory: {
+    type: String, trim: true,
+    enum: ['western', 'indo_western', 'traditional', 'fusion', 'other', ''],
     default: '',
   },
   details: {

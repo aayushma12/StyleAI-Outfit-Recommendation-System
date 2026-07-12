@@ -6,10 +6,13 @@ const explanationSchema = require('./schemas/explanationSchema');
 // ── Shared sub-schemas ────────────────────────────────────────────────────────
 
 const outfitSlotSchema = new mongoose.Schema({
-  item:       { type: mongoose.Schema.Types.ObjectId, ref: 'WardrobeItem', default: null },
-  name:       { type: String, default: '' },
-  suggestion: { type: String, default: '' },
-  reason:     { type: String, default: '' },
+  item:          { type: mongoose.Schema.Types.ObjectId, ref: 'WardrobeItem', default: null },
+  name:          { type: String, default: '' },
+  suggestion:    { type: String, default: '' },
+  reason:        { type: String, default: '' },
+  // A real catalog product suggested to fill a gap the wardrobe doesn't cover —
+  // distinct from `suggestion` (generic fallback text with no real product behind it).
+  suggestedItem: { type: mongoose.Schema.Types.ObjectId, ref: 'Outfit', default: null },
 }, { _id: false });
 
 const scoreBreakdownSchema = new mongoose.Schema({
@@ -226,26 +229,39 @@ recommendationSessionSchema.index({ user: 1, 'context.occasion': 1 });
 recommendationSessionSchema.index({ user: 1, 'context.requestedBy': 1, createdAt: -1 });
 
 // ── Population helper ─────────────────────────────────────────────────────────
-const POPULATE_PATHS = [
-  'recommendations.outfit.top.item',
-  'recommendations.outfit.bottom.item',
-  'recommendations.outfit.dress.item',
-  'recommendations.outfit.outerwear.item',
-  'recommendations.outfit.footwear.item',
-  'recommendations.outfit.accessory.item',
-  'recommendations.outfit.jewelry.item',
-  'recommendations.outfit.bag.item',
-  'recommendations.outfit.belt.item',
-  'recommendations.outfit.watch.item',
-  'recommendations.outfit.scarf.item',
-  'recommendations.outfit.sunglasses.item',
-  'recommendations.outfit.hair_accessory.item',
+const OUTFIT_SLOTS = [
+  'top', 'bottom', 'dress', 'outerwear', 'footwear',
+  'accessory', 'jewelry', 'bag', 'belt', 'watch', 'scarf', 'sunglasses', 'hair_accessory',
 ];
+const POPULATE_PATHS = OUTFIT_SLOTS.map(slot => `recommendations.outfit.${slot}.item`);
+const SUGGESTED_ITEM_PATHS = OUTFIT_SLOTS.map(slot => `recommendations.outfit.${slot}.suggestedItem`);
 
 recommendationSessionSchema.statics.populateItems = function(query) {
   let q = query;
   POPULATE_PATHS.forEach(path => { q = q.populate(path, 'name color category imageUrl occasion'); });
+  // No `price` — the recommendation workflow helps users decide what to
+  // wear, not what to buy, so financial information is never returned here.
+  SUGGESTED_ITEM_PATHS.forEach(path => { q = q.populate(path, 'name imageUrl imageVerified category brand occasion colors'); });
   return q;
+};
+
+// Strips imageUrl from any suggestedItem that hasn't been human-verified to
+// actually depict this item (see Outfit.imageVerified) — enforced here, once,
+// so every caller gets the guarantee automatically rather than relying on
+// each frontend render path to check the flag correctly.
+function sanitizeUnverifiedImages(doc) {
+  if (!doc) return doc;
+  if (Array.isArray(doc)) return doc.map(sanitizeUnverifiedImages);
+  for (const rec of doc.recommendations || []) {
+    for (const slot of Object.values(rec.outfit || {})) {
+      if (slot?.suggestedItem && !slot.suggestedItem.imageVerified) slot.suggestedItem.imageUrl = '';
+    }
+  }
+  return doc;
+}
+
+recommendationSessionSchema.statics.populateAndSanitize = async function(query) {
+  return sanitizeUnverifiedImages(await this.populateItems(query).lean());
 };
 
 module.exports = mongoose.model('Recommendation', recommendationSessionSchema);

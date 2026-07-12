@@ -12,6 +12,7 @@ const WardrobeItem   = require('../models/WardrobeItem');
 const WardrobeCombo  = require('../models/WardrobeCombo');
 const OutfitCalendar = require('../models/OutfitCalendar');
 const Recommendation = require('../models/Recommendation');
+const Outfit         = require('../models/Outfit');
 const { getUserInsights, getNegativeSignals, getStyleEvolution, getRecentlyRecommendedItemIds } = require('./behaviorService');
 const kathmandu      = require('./kathmanduIntelligence');
 const collaborative  = require('./collaborativeService');
@@ -144,7 +145,7 @@ exports.buildContext = async function buildContext(user, options = {}) {
   const [
     wardrobeItems, recentSaved, insights, weather, cfData,
     negativeSignals, styleEvolution, upcomingEvent, recentOutfitSummaries,
-    recentlyRecommendedItemIds, recentlyServedFingerprints,
+    recentlyRecommendedItemIds, recentlyServedFingerprints, catalogItems,
   ] = await Promise.all([
     WardrobeItem.find({ user: user._id }).lean(),
     WardrobeCombo.find({ user: user._id }).sort({ createdAt: -1 }).limit(10).select('name occasion').lean(),
@@ -157,6 +158,12 @@ exports.buildContext = async function buildContext(user, options = {}) {
     providedSummaries !== null ? Promise.resolve(providedSummaries) : getRecentOutfitSummaries(user._id, 7),
     getRecentlyRecommendedItemIds(user._id, 14).catch(() => []),
     getRecentlyServedFingerprints(user._id).catch(() => new Set()),
+    // Real catalog products eligible to fill a wardrobe gap as a "Suggested
+    // Addition" — never 'full_outfit' (not a per-slot concept here).
+    Outfit.find({
+      isActive: true, isApproved: true,
+      category: { $in: ['tops', 'bottoms', 'dresses', 'outerwear', 'footwear', 'accessories', 'traditional'] },
+    }).limit(100).lean().catch(() => []),
   ]);
 
   collaborative.refreshSimilarUsers(user._id, user).catch(() => {});
@@ -187,7 +194,7 @@ exports.buildContext = async function buildContext(user, options = {}) {
     cfData, cfInsights,
     upcomingEvent, recentOutfitSummaries, recentlyRecommendedItemIds,
     recentlyServedFingerprints,
-    utilizationReport, predictiveInsights,
+    utilizationReport, predictiveInsights, catalogItems,
     allowSuggestions: allowSuggestions !== undefined ? allowSuggestions : !wardrobeOnly,
   };
 };

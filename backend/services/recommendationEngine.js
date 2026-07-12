@@ -27,7 +27,7 @@ const ALL_OUTFIT_SLOTS = [
 ];
 
 function emptySlotShape() {
-  return { item: null, name: '', suggestion: '', reason: '' };
+  return { item: null, name: '', suggestion: '', reason: '', suggestedItem: null };
 }
 
 function buildOutfitName(catMeta, outfitItems) {
@@ -146,6 +146,7 @@ async function runPipeline(user, options, categories, candidateOverrides = {}, w
     season:   context.season?.seasonKey,
     allowSuggestions: context.allowSuggestions,
     styleHint: context.styleHint,
+    catalogItems: context.catalogItems,
     ...candidateOverrides,
   });
 
@@ -222,7 +223,7 @@ exports.generateSession = async (user, options = {}) => {
     status: 'complete',
   });
 
-  return Recommendation.populateItems(Recommendation.findById(session._id)).lean();
+  return Recommendation.populateAndSanitize(Recommendation.findById(session._id));
 };
 
 // ── Wizard session generation ─────────────────────────────────────────────────
@@ -234,26 +235,18 @@ const WIZARD_CATEGORIES = [
 ];
 
 exports.generateWizardSession = async (user, wizardParams = {}) => {
-  const {
-    occasion = 'formal', dresscode = '', budget = 'mid-range',
-    indoorOutdoor = 'indoor', dayNight = 'day', style = '',
-    vibe = '', accessories = true, colors = '', extraNotes = '',
-    luxuryBudget = false,
-  } = wizardParams;
+  const { occasion = 'daily', style = '', extraNotes = '' } = wizardParams;
 
   // Wizard is a premium styling session — not wardrobe-constrained — but its
-  // color/style/accessory answers should still shape which real wardrobe items
-  // (and which generic suggestions) get favoured.
+  // style answer should still shape which real wardrobe items (and which
+  // generic suggestions) get favoured.
   const candidateOverrides = {
     allowSuggestions: true,
-    preferredColors:  colors ? colors.split(',').map(c => c.trim()).filter(Boolean) : [],
-    styleHint:         style || undefined,
-    maxAccessories:    accessories === false ? 1 : 3,
+    styleHint: style || undefined,
   };
 
   const { context, candidates, deduped } = await runPipeline(
-    user, { occasion, requestedBy: 'wizard', allowSuggestions: true }, WIZARD_CATEGORIES, candidateOverrides,
-    { dresscode, budget, indoorOutdoor, dayNight, vibe }
+    user, { occasion, requestedBy: 'wizard', allowSuggestions: true }, WIZARD_CATEGORIES, candidateOverrides
   );
 
   const session = await Recommendation.create({
@@ -263,10 +256,7 @@ exports.generateWizardSession = async (user, wizardParams = {}) => {
       weather: context.weather.temp !== null ? context.weather : undefined,
       season:  context.season.season, timeOfDay: context.tod,
     },
-    wizardContext: {
-      occasion, dresscode, budget, indoorOutdoor, dayNight,
-      style, vibe, accessories, luxuryBudget, extraNotes,
-    },
+    wizardContext: { occasion, style, extraNotes },
     ...sessionCommonFields(context),
     recommendations: deduped,
     generationMeta: {
@@ -277,31 +267,31 @@ exports.generateWizardSession = async (user, wizardParams = {}) => {
     status: 'complete',
   });
 
-  return Recommendation.populateItems(Recommendation.findById(session._id)).lean();
+  return Recommendation.populateAndSanitize(Recommendation.findById(session._id));
 };
 
 // ── Query helpers ─────────────────────────────────────────────────────────────
 
 exports.getLatestSession = async (userId) => {
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
-  return Recommendation.populateItems(
+  return Recommendation.populateAndSanitize(
     Recommendation.findOne({ user: userId, status: 'complete', createdAt: { $gte: sixHoursAgo } }).sort({ createdAt: -1 })
-  ).lean();
+  );
 };
 
 exports.getHistory = async (userId, { page = 1, limit = 8 } = {}) => {
   const skip = (page - 1) * limit;
   const [docs, total] = await Promise.all([
-    Recommendation.populateItems(
+    Recommendation.populateAndSanitize(
       Recommendation.find({ user: userId, status: 'complete' }).sort({ createdAt: -1 }).skip(skip).limit(limit)
-    ).lean(),
+    ),
     Recommendation.countDocuments({ user: userId, status: 'complete' }),
   ]);
   return { sessions: docs, total, page, pages: Math.ceil(total / limit) };
 };
 
 exports.getSessionById = async (userId, sessionId) =>
-  Recommendation.populateItems(Recommendation.findOne({ _id: sessionId, user: userId })).lean();
+  Recommendation.populateAndSanitize(Recommendation.findOne({ _id: sessionId, user: userId }));
 
 // Re-exported for existing callers (dailyRecommendationService, recommendationController).
 exports.fetchWeather             = weatherService.fetchWeather;

@@ -45,9 +45,9 @@ describe('Admin wardrobe AI-metadata backfill', () => {
     const { token } = await mkPlainUserToken();
 
     await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Untagged Item', category: 'tops', color: 'blue', imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg' });
+      .send({ name: 'Untagged Item', category: 'tops', color: 'blue', occasion: 'daily', imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg' });
     const tagged = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Already Tagged', category: 'tops', color: 'red', imageUrl: 'https://res.cloudinary.com/demo/image/upload/b.jpg' });
+      .send({ name: 'Already Tagged', category: 'tops', color: 'red', occasion: 'daily', imageUrl: 'https://res.cloudinary.com/demo/image/upload/b.jpg' });
     await WardrobeItem.findByIdAndUpdate(tagged.body.item._id, { 'aiMeta.provider': 'gemini' });
 
     const res = await request(app).get('/api/admin/wardrobe/ai-coverage').set('Authorization', `Bearer ${adminToken}`);
@@ -62,9 +62,9 @@ describe('Admin wardrobe AI-metadata backfill', () => {
     const { token } = await mkPlainUserToken();
 
     const untagged = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Untagged Item', category: 'tops', color: 'blue', imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg' });
+      .send({ name: 'Untagged Item', category: 'tops', color: 'blue', occasion: 'daily', imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg' });
     const tagged = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Already Tagged', category: 'tops', color: 'red', imageUrl: 'https://res.cloudinary.com/demo/image/upload/b.jpg' });
+      .send({ name: 'Already Tagged', category: 'tops', color: 'red', occasion: 'daily', imageUrl: 'https://res.cloudinary.com/demo/image/upload/b.jpg' });
     await WardrobeItem.findByIdAndUpdate(tagged.body.item._id, { 'aiMeta.provider': 'gemini' });
 
     const res = await request(app).post('/api/admin/wardrobe/ai-backfill')
@@ -89,7 +89,7 @@ describe('Admin wardrobe AI-metadata backfill', () => {
     const { token } = await mkPlainUserToken();
 
     const colorOnlyItem = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Color Only Item', category: 'tops', color: 'blue', imageUrl: 'https://res.cloudinary.com/demo/image/upload/c.jpg' });
+      .send({ name: 'Color Only Item', category: 'tops', color: 'blue', occasion: 'daily', imageUrl: 'https://res.cloudinary.com/demo/image/upload/c.jpg' });
     await WardrobeItem.findByIdAndUpdate(colorOnlyItem.body.item._id, { 'aiMeta.provider': 'color-only' });
 
     const coverage = await request(app).get('/api/admin/wardrobe/ai-coverage').set('Authorization', `Bearer ${adminToken}`);
@@ -107,7 +107,7 @@ describe('Admin wardrobe AI-metadata backfill', () => {
     const { token } = await mkPlainUserToken();
 
     await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Will Fail', category: 'tops', color: 'blue', imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg' });
+      .send({ name: 'Will Fail', category: 'tops', color: 'blue', occasion: 'daily', imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg' });
 
     visionExtraction.analyzeWardrobeImage.mockRejectedValueOnce(new Error('vision provider timeout'));
 

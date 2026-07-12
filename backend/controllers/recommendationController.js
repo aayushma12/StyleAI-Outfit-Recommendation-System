@@ -114,32 +114,20 @@ exports.generate = async (req, res) => {
 
 /**
  * POST /recommendations/wizard
- * Advanced multi-parameter recommendation generator.
- * Accepts 10+ styling parameters and generates 3 complete outfit options.
+ * Focused 3-question recommendation generator: occasion, style, optional notes.
  */
 exports.wizard = async (req, res) => {
   const {
-    occasion      = 'formal',
-    dresscode     = '',
-    budget        = 'mid-range',
-    indoorOutdoor = 'indoor',
-    dayNight      = 'day',
-    style         = '',
-    vibe          = '',
-    accessories   = true,
-    colors        = '',
-    extraNotes    = '',
-    luxuryBudget  = false,
+    occasion   = 'daily',
+    style      = '',
+    extraNotes = '',
   } = req.body;
 
   const user = await User.findById(req.user._id).lean();
   if (!user) return res.status(404).json({ message: 'User not found.' });
 
   try {
-    const session = await engine.generateWizardSession(user, {
-      occasion, dresscode, budget, indoorOutdoor, dayNight,
-      style, vibe, accessories, colors, extraNotes, luxuryBudget,
-    });
+    const session = await engine.generateWizardSession(user, { occasion, style, extraNotes });
 
     logBehavior(req.user._id, 'recommendation_view', {
       entityId:   session._id,

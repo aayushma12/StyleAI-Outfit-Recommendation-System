@@ -461,6 +461,25 @@ body.dark-mode .ad-table thead tr { background: var(--bg-surface-2); }
 .ad-input::placeholder { color: var(--text-placeholder); }
 .ad-textarea { resize: vertical; min-height: 68px; }
 
+/* ── Catalog image upload ─────────────────────────────────────────────────── */
+.ad-upload-status { font-size: 0.78rem; color: var(--text-muted); margin: 6px 0 0; }
+.ad-upload-status--error { color: var(--clr-error); }
+.ad-upload-preview {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+}
+.ad-upload-preview img {
+  width: 48px; height: 48px; border-radius: var(--radius-sm);
+  object-fit: cover; border: 1px solid var(--border-subtle);
+}
+.ad-upload-verified   { font-size: 0.78rem; font-weight: 600; color: var(--clr-success); }
+.ad-upload-unverified { font-size: 0.78rem; font-weight: 600; color: var(--clr-warning); }
+.ad-upload-manual { margin-top: 10px; }
+.ad-upload-manual summary { font-size: 0.78rem; color: var(--text-muted); cursor: pointer; }
+.ad-upload-confirm {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; color: var(--text-secondary); margin-top: 6px; cursor: pointer;
+}
+
 /* Form grid */
 .ad-form-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 

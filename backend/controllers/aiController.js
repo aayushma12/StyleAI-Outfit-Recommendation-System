@@ -23,20 +23,11 @@ const { escapeRegex }  = require('../utils/validation');
 const OUTFIT_INTENT_RE = /\b(what (should|can|do|to) i wear|what to wear|suggest .*(an outfit|something to wear)|recommend .*(an outfit|clothes|what to wear)|outfit for|style me|dress me|help me (dress|get dressed)|pick (an outfit|something)|put together (an outfit|a look))\b/i;
 
 const OCCASION_KEYWORDS = {
-  office: ['office', 'work meeting', ' work ', 'workplace'],
-  college: ['college', 'university', 'class'],
-  interview: ['interview'],
-  party: ['party', 'celebration'],
-  wedding: ['wedding', 'marriage ceremony'],
-  date: ['date night', 'a date'],
-  gym: ['gym', 'workout', 'exercise'],
-  festival: ['festival', 'dashain', 'tihar', 'teej', 'holi'],
-  formal: ['formal event', 'presentation'],
-  travel: ['travel', 'trip', 'trekking', 'hike'],
-  cafe: ['cafe', 'coffee', 'brunch'],
-  graduation: ['graduation'],
-  birthday: ['birthday'],
-  family_gathering: ['family gathering', 'family function'],
+  office: ['office', 'work meeting', ' work ', 'workplace', 'interview', 'business meeting', 'formal event', 'presentation'],
+  traditional: ['wedding', 'marriage ceremony', 'festival', 'dashain', 'tihar', 'teej', 'holi', 'graduation'],
+  sports: ['gym', 'workout', 'exercise', 'trekking', 'hike'],
+  party: ['party', 'celebration', 'birthday', 'date night', 'a date'],
+  daily: ['college', 'university', 'class', 'cafe', 'coffee', 'brunch', 'travel', 'trip', 'family gathering', 'family function'],
 };
 
 function detectOutfitOccasion(message) {

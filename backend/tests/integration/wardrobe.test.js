@@ -27,7 +27,25 @@ describe('Wardrobe item CRUD + validation', () => {
 
   test('rejects an invalid category', async () => {
     const res = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Test Shirt', category: 'not-a-real-category', color: 'blue' });
+      .send({ name: 'Test Shirt', category: 'not-a-real-category', color: 'blue', occasion: 'daily' });
+    expect(res.status).toBe(400);
+  });
+
+  test('rejects a retired category value (jackets/traditional no longer valid)', async () => {
+    const res = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test Jacket', category: 'jackets', color: 'blue', occasion: 'daily' });
+    expect(res.status).toBe(400);
+  });
+
+  test('rejects creation with a missing occasion', async () => {
+    const res = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test Shirt', category: 'tops', color: 'blue' });
+    expect(res.status).toBe(400);
+  });
+
+  test('rejects creation with an invalid occasion value', async () => {
+    const res = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test Shirt', category: 'tops', color: 'blue', occasion: 'not-a-real-occasion' });
     expect(res.status).toBe(400);
   });
 
@@ -39,7 +57,7 @@ describe('Wardrobe item CRUD + validation', () => {
 
   test('creates a valid item and returns it', async () => {
     const res = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Test Shirt', category: 'tops', color: 'blue' });
+      .send({ name: 'Test Shirt', category: 'tops', color: 'blue', occasion: 'daily' });
     expect(res.status).toBe(201);
     expect(res.body.item.name).toBe('Test Shirt');
     expect(res.body.item._id).toBeDefined();
@@ -47,7 +65,7 @@ describe('Wardrobe item CRUD + validation', () => {
 
   test('full lifecycle: create -> get -> partial update -> delete', async () => {
     const create = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Lifecycle Item', category: 'tops', color: 'red' });
+      .send({ name: 'Lifecycle Item', category: 'tops', color: 'red', occasion: 'daily' });
     const id = create.body.item._id;
 
     const get = await request(app).get(`/api/wardrobe/${id}`).set('Authorization', `Bearer ${token}`);
@@ -70,7 +88,7 @@ describe('Wardrobe item CRUD + validation', () => {
 
   test('rejects a bad category on a partial update without requiring the other fields', async () => {
     const create = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Test Item', category: 'tops', color: 'blue' });
+      .send({ name: 'Test Item', category: 'tops', color: 'blue', occasion: 'daily' });
     const id = create.body.item._id;
 
     const res = await request(app).put(`/api/wardrobe/${id}`).set('Authorization', `Bearer ${token}`)
@@ -85,7 +103,7 @@ describe('Wardrobe item CRUD + validation', () => {
 
   test('a wardrobe item created by one user is not accessible to another', async () => {
     const create = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Private Item', category: 'tops', color: 'blue' });
+      .send({ name: 'Private Item', category: 'tops', color: 'blue', occasion: 'daily' });
     const id = create.body.item._id;
 
     const otherToken = await registerAndGetToken(`other-user-${Date.now()}@example.com`);
@@ -102,7 +120,7 @@ describe('AI-detected metadata actually persists (regression: pattern used to be
 
   test('pattern, neckline, genderCategory, and details all persist on create', async () => {
     const res = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`).send({
-      name: 'AI Tagged Item', category: 'tops', color: 'blue',
+      name: 'AI Tagged Item', category: 'tops', color: 'blue', occasion: 'daily',
       pattern: 'striped', neckline: 'v_neck', genderCategory: 'women',
       details: { hasHood: false, hasButtons: true, hasZipper: false, hasPockets: false, hasLogo: false, hasBelt: false, isTransparent: false },
     });
@@ -122,7 +140,7 @@ describe('AI-detected metadata actually persists (regression: pattern used to be
 
   test('pattern, neckline, genderCategory, and details all persist on update', async () => {
     const create = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Update Target', category: 'tops', color: 'red' });
+      .send({ name: 'Update Target', category: 'tops', color: 'red', occasion: 'daily' });
     const id = create.body.item._id;
 
     const update = await request(app).put(`/api/wardrobe/${id}`).set('Authorization', `Bearer ${token}`).send({
@@ -135,6 +153,22 @@ describe('AI-detected metadata actually persists (regression: pattern used to be
     expect(update.body.item.genderCategory).toBe('unisex');
     expect(update.body.item.details.hasZipper).toBe(true);
   });
+
+  test('isCompleteOutfit persists on create and update (regression: same silent-drop bug class)', async () => {
+    const create = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`).send({
+      name: 'Co-ord Set', category: 'tops', color: 'cream', occasion: 'daily', isCompleteOutfit: true,
+    });
+    expect(create.status).toBe(201);
+    expect(create.body.item.isCompleteOutfit).toBe(true);
+
+    const refetch = await request(app).get(`/api/wardrobe/${create.body.item._id}`).set('Authorization', `Bearer ${token}`);
+    expect(refetch.body.item.isCompleteOutfit).toBe(true);
+
+    const update = await request(app).put(`/api/wardrobe/${create.body.item._id}`).set('Authorization', `Bearer ${token}`)
+      .send({ isCompleteOutfit: false });
+    expect(update.status).toBe(200);
+    expect(update.body.item.isCompleteOutfit).toBe(false);
+  });
 });
 
 describe('Deleting a wardrobe item referenced by a saved combo', () => {
@@ -145,9 +179,9 @@ describe('Deleting a wardrobe item referenced by a saved combo', () => {
 
   test('removes the item from the combo cleanly instead of leaving a dangling ref', async () => {
     const item1 = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Combo Top', category: 'tops', color: 'blue' });
+      .send({ name: 'Combo Top', category: 'tops', color: 'blue', occasion: 'daily' });
     const item2 = await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Combo Bottom', category: 'bottoms', color: 'black' });
+      .send({ name: 'Combo Bottom', category: 'bottoms', color: 'black', occasion: 'daily' });
 
     const combo = await request(app).post('/api/wardrobe/outfits/save').set('Authorization', `Bearer ${token}`)
       .send({ name: 'Test Combo', items: [item1.body.item._id, item2.body.item._id], occasion: 'daily' });
@@ -202,7 +236,7 @@ describe('GET /api/wardrobe/outfit-preview — ad-hoc composite, never persisted
   });
 
   test('returns { url: null } gracefully when items have no real images, and never creates a WardrobeCombo', async () => {
-    const item = await WardrobeItem.create({ user: userId, name: 'Test Top', category: 'tops', color: 'blue' });
+    const item = await WardrobeItem.create({ user: userId, name: 'Test Top', category: 'tops', color: 'blue', occasion: 'daily' });
 
     const res = await request(app).get(`/api/wardrobe/outfit-preview?items=${item._id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -218,12 +252,33 @@ describe('GET /api/wardrobe/outfit-preview — ad-hoc composite, never persisted
       password: 'StrongP@ss123', consentGiven: 'true',
     });
     const otherUserId = otherRes.body.user?._id || otherRes.body.user?.id;
-    const otherItem = await WardrobeItem.create({ user: otherUserId, name: 'Not Mine', category: 'tops', color: 'red' });
+    const otherItem = await WardrobeItem.create({ user: otherUserId, name: 'Not Mine', category: 'tops', color: 'red', occasion: 'daily' });
 
     const res = await request(app).get(`/api/wardrobe/outfit-preview?items=${otherItem._id}`)
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ url: null });
+  });
+});
+
+describe('GET /api/wardrobe/stats', () => {
+  test('includes utilizationRate alongside the existing breakdown fields', async () => {
+    const token = await registerAndGetToken(`stats-util-${Date.now()}-${Math.random()}@example.com`);
+    await request(app).post('/api/wardrobe').set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Stats Top', category: 'tops', color: 'blue', occasion: 'daily' });
+
+    const res = await request(app).get('/api/wardrobe/stats').set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(typeof res.body.utilizationRate).toBe('number');
+    expect(res.body.total).toBe(1);
+  });
+
+  test('returns utilizationRate:0 rather than crashing for an empty wardrobe', async () => {
+    const token = await registerAndGetToken(`stats-util-empty-${Date.now()}-${Math.random()}@example.com`);
+    const res = await request(app).get('/api/wardrobe/stats').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.utilizationRate).toBe(0);
   });
 });

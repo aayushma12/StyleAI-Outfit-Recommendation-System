@@ -1,8 +1,9 @@
 import os
 import sys
+import time
 import logging
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from pymongo import MongoClient
 
@@ -17,12 +18,34 @@ logging.basicConfig(
 import ml_engine  # noqa: E402 — imported after logging config so its module-level logger inherits it
 import ranking_metrics  # noqa: E402 — same reasoning
 
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 _allowed_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5000,http://localhost:3000').split(',')
 CORS(app, origins=_allowed_origins)
 
+
+# Request-level tracing — every call the backend makes to this service leaves
+# a one-line record of method/path/status/duration, so a failure can be
+# pinned to "the request never arrived" vs "arrived and errored" vs "arrived,
+# succeeded, but was slow" without adding logging inside every route.
+@app.before_request
+def _log_request_start():
+    g._start_time = time.monotonic()
+
+
+@app.after_request
+def _log_request_end(response):
+    duration_ms = round((time.monotonic() - g.get('_start_time', time.monotonic())) * 1000, 1)
+    logger.info('%s %s -> %s (%sms)', request.method, request.path, response.status_code, duration_ms)
+    return response
+
+
 # Pre-load the acceptance model at startup so the first request isn't slow.
-ml_engine.load()
+if ml_engine.load() is None:
+    logger.warning('Starting with no acceptance model loaded — /predict-acceptance-batch will return 503 until a model exists (run /retrain or the training script).')
+else:
+    logger.info('Acceptance model loaded successfully at startup.')
 
 
 @app.route('/health', methods=['GET'])
@@ -51,11 +74,15 @@ def predict_acceptance_batch():
     data = request.get_json(silent=True) or {}
     samples = data.get('samples', [])
     if not samples:
+        logger.info('predict-acceptance-batch: empty samples array, nothing to predict.')
         return jsonify({'predictions': []})
 
+    logger.info('predict-acceptance-batch: scoring %d sample(s).', len(samples))
     predictions = ml_engine.get_acceptance_predictions(samples)
     if predictions is None:
+        logger.warning('predict-acceptance-batch: model unavailable or prediction failed for %d sample(s) — see prior error log line.', len(samples))
         return jsonify({'error': 'Model not loaded — retrain first.', 'predictions': []}), 503
+    logger.info('predict-acceptance-batch: returned %d prediction(s).', len(predictions))
     return jsonify({'predictions': predictions})
 
 

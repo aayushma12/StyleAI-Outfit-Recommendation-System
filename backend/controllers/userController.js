@@ -206,13 +206,20 @@ exports.completeOnboarding = async (req, res) => {
     lifestyle, additionalStyleNotes,
   } = req.body;
 
-  if (!bodyType) return res.status(400).json({ message: 'Body type is required.' });
-
+  // bodyType is collected once at registration (Register.jsx) and isn't asked
+  // again by the style quiz (Onboarding.jsx), which only has the *current*
+  // user's bodyType to pass through. Any account that reaches this endpoint
+  // without one yet (e.g. registration succeeded but the initial onboarding
+  // call didn't complete) must still be able to save the rest of its style
+  // profile — hard-rejecting the whole request left those users permanently
+  // unable to complete onboarding. bodyTypeScore() in fashionRulesEngine.js
+  // already degrades gracefully to a neutral score when it's unset.
   const updates = {
-    age, bodyType, stylePreferences, culturalBackground,
+    age, stylePreferences, culturalBackground,
     occasionPreferences, colorPreferences, budgetRange,
     onboardingCompleted: true,
   };
+  if (bodyType          !== undefined) updates.bodyType          = bodyType;
   if (height            !== undefined) updates.height            = height;
   if (weight            !== undefined) updates.weight            = weight;
   if (skinTone          !== undefined) updates.skinTone          = skinTone;

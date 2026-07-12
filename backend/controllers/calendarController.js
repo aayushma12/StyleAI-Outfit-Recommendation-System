@@ -1,6 +1,7 @@
 const OutfitCalendar = require('../models/OutfitCalendar');
 const WardrobeCombo  = require('../models/WardrobeCombo');
 const logActivity    = require('../utils/historyLogger');
+const { logBehavior } = require('../services/behaviorService');
 
 const toUTCDay = (d) => {
   const dt = new Date(d);
@@ -89,6 +90,20 @@ exports.upsertEntry = async (req, res) => {
       metadata: { outfitName: outfitName || '', occasion: occasion || '', date: fmtDate(day) },
       refId: entry._id,
     });
+
+    // Scheduling a real saved outfit is a positive behavioral signal too —
+    // without this, getRecentlyRecommendedItemIds() never learns about
+    // outfits the user has committed to wearing on a specific day, and the
+    // diversity engine could re-suggest the exact same combination.
+    if (combo) {
+      const comboDoc = await WardrobeCombo.findById(combo).select('items').lean();
+      if (comboDoc?.items?.length) {
+        logBehavior(req.user._id, 'outfit_save', {
+          entityId: combo, entityType: 'WardrobeCombo',
+          metadata: { itemIds: comboDoc.items, source: isUpdate ? 'calendar_updated' : 'calendar_scheduled' },
+        });
+      }
+    }
 
     res.json({ entry });
   } catch (err) { res.status(500).json({ message: err.message }); }

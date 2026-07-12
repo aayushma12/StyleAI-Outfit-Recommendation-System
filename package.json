@@ -12,6 +12,7 @@
     "dev:ml": "python ml-service/app.py",
     "train:ml": "python ml-service/acceptance_trainer.py",
     "seed:kathmandu": "cd backend && node scripts/seedKathmanduTrends.js",
+    "seed:catalog": "cd backend && node scripts/seedOutfitCatalog.js",
     "seed:persona-data": "cd backend && node scripts/seedPersonaSyntheticBehavior.js",
     "seed:weather-history": "cd backend && node scripts/seedHistoricalWeather.js",
     "analyze:calibration": "python ml-service/calibration_analysis.py",

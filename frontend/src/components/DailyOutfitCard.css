@@ -247,6 +247,13 @@ body.dark-mode .doc-item--owned { background: rgba(5,78,49,0.2); border-color: r
   line-height: 1;
   flex-shrink: 0;
 }
+.doc-item-thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  flex-shrink: 0;
+}
 .doc-item-body { flex: 1; min-width: 0; }
 .doc-item-name {
   font-size: 13px;
@@ -305,6 +312,37 @@ body.dark-mode .doc-item-badge--sug { background: rgba(13,148,136,0.15); color: 
 }
 .doc-accent:hover { background: var(--bg-hover); border-color: var(--border-default); }
 .doc-accent-emoji { font-size: 14px; }
+.doc-accent-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.doc-accent--owned {
+  border-color: rgba(5,150,105,0.35);
+  background: var(--clr-success-bg);
+}
+.doc-accent-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--clr-success-bg);
+  color: #065f46;
+  border: 1px solid rgba(5,150,105,0.25);
+}
+.doc-accent-badge--sug {
+  background: var(--clr-primary-50);
+  color: var(--clr-primary-700);
+  border-color: var(--clr-primary-200);
+}
+body.dark-mode .doc-accent--owned    { background: rgba(5,78,49,0.2); border-color: rgba(5,150,105,0.3); }
+body.dark-mode .doc-accent-badge     { background: rgba(5,78,49,0.3); color: #86efac; border-color: rgba(5,150,105,0.2); }
+body.dark-mode .doc-accent-badge--sug { background: rgba(13,148,136,0.15); color: var(--clr-primary-300); border-color: rgba(13,148,136,0.25); }
+
+.doc-alt-detail-badge { margin-left: 6px; }
 
 /* ── AI Explanation ───────────────────────────────────────────────────────── */
 .doc-explanation {

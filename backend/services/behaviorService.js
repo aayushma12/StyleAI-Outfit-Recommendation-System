@@ -226,7 +226,11 @@ exports.getRecentlyRecommendedItemIds = async (userId, days = 30) => {
   const since = new Date(Date.now() - days * 86400000);
   const logs  = await BehaviorLog.find({
     user:   userId,
-    action: 'recommendation_accept',
+    // Not just 'recommendation_accept' (worn/liked) — a recommendation that
+    // was only *saved* (never worn/liked) still shouldn't be re-suggested
+    // right away, and neither should an outfit just scheduled onto the
+    // calendar (logged as 'outfit_save' by calendarController.upsertEntry).
+    action: { $in: ['recommendation_accept', 'recommendation_save', 'outfit_save'] },
     'metadata.itemIds': { $exists: true, $ne: [] },
     createdAt: { $gte: since },
   }).select('metadata.itemIds').lean();

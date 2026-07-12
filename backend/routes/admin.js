@@ -6,6 +6,7 @@ const { body, validationResult } = require('express-validator');
 const { protect }   = require('../middleware/auth');
 const { adminOnly } = require('../middleware/admin');
 const validateObjectId = require('../middleware/validateObjectId');
+const { isAllowedImageUrl } = require('../utils/urlSafety');
 const ctrl = require('../controllers/adminController');
 
 const guard  = [protect, adminOnly];
@@ -27,6 +28,12 @@ const validateUpdateUserBody = [
 const validateAdminProfileBody = [
   body('name').trim().notEmpty().withMessage('Name is required.').isLength({ max: 100 }),
   body('email').trim().isEmail().withMessage('A valid email is required.').normalizeEmail(),
+  checkValidation,
+];
+
+const validateCatalogOutfitBody = [
+  body('imageUrl').optional({ checkFalsy: true }).trim()
+    .custom(isAllowedImageUrl).withMessage('imageUrl must be a Cloudinary-hosted image URL.'),
   checkValidation,
 ];
 
@@ -70,8 +77,8 @@ router.put('/password',                       ...guard, ctrl.changeAdminPassword
 // ── Outfit Catalog Management ──────────────────────────────────────────────────
 router.get('/outfits',                        ...guard, ctrl.getCatalogOutfits);
 router.get('/outfits/:id',                    ...guard, checkId, ctrl.getCatalogOutfit);
-router.post('/outfits',                       ...guard, ctrl.createCatalogOutfit);
-router.put('/outfits/:id',                    ...guard, checkId, ctrl.updateCatalogOutfit);
+router.post('/outfits',                       ...guard, validateCatalogOutfitBody, ctrl.createCatalogOutfit);
+router.put('/outfits/:id',                    ...guard, checkId, validateCatalogOutfitBody, ctrl.updateCatalogOutfit);
 router.delete('/outfits/:id',                 ...guard, checkId, ctrl.deleteCatalogOutfit);
 router.patch('/outfits/:id/approve',          ...guard, checkId, ctrl.approveCatalogOutfit);
 

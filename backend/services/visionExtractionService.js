@@ -12,6 +12,7 @@ const ai        = require('./aiProviderService');
 const colorSvc  = require('./colorExtractionService');
 const { sanitizeEnum, sanitizeEnumArray } = require('../utils/validation');
 const { isAllowedImageUrl } = require('../utils/urlSafety');
+const { OCCASIONS: VALID_OCCASIONS } = require('../constants/occasions');
 
 const VALID_PATTERNS   = ['solid', 'striped', 'plaid', 'floral', 'geometric', 'abstract', 'animal_print', 'paisley', 'checkered', 'embroidered', 'other'];
 const VALID_FITS       = ['fitted', 'regular', 'relaxed', 'oversized', 'cropped'];
@@ -20,12 +21,13 @@ const VALID_SEASONS    = ['winter', 'spring', 'monsoon', 'autumn', 'all'];
 const VALID_STYLE_TAGS = ['minimalist', 'streetwear', 'smart_casual', 'korean', 'vintage',
   'preppy', 'athleisure', 'romantic', 'edgy', 'boho', 'classic', 'grunge', 'cottagecore', 'y2k', 'modest_chic'];
 const VALID_LAYERING   = ['base', 'mid', 'outer', 'one_piece'];
-const VALID_OCCASIONS  = ['daily', 'college', 'home', 'travel', 'gym', 'cafe', 'shopping', 'date',
-  'party', 'office', 'formal', 'festival', 'wedding', 'pooja', 'trekking', 'interview', 'birthday',
-  'traditional_ceremony', 'graduation', 'family_gathering'];
 const VALID_ACCESSORY_SLOTS = ['jewelry', 'bag', 'belt', 'watch', 'scarf', 'sunglasses', 'hair_accessory', 'footwear', 'outerwear'];
 const VALID_NECKLINES  = ['crew', 'round', 'v_neck', 'polo_collar', 'shirt_collar', 'turtleneck', 'high_neck', 'square_neck', 'off_shoulder', 'boat_neck'];
 const VALID_GENDERS    = ['women', 'men', 'unisex'];
+const VALID_TEXTURES    = ['smooth', 'ribbed', 'knit', 'woven', 'lace', 'sequined', 'embroidered', 'denim', 'leather', 'velvet', 'satin', 'other'];
+const VALID_SILHOUETTES = ['fitted', 'a_line', 'straight', 'flared', 'bodycon', 'oversized', 'wrap', 'asymmetric', 'other'];
+const VALID_WEATHER     = ['hot', 'mild', 'cold', 'rainy', 'any'];
+const VALID_CULTURAL    = ['western', 'indo_western', 'traditional', 'fusion', 'other'];
 
 const SYSTEM_PROMPT = `You are a professional fashion cataloguer analyzing a single clothing item photo for a Kathmandu-based women's fashion app. Respond with ONLY a single JSON object — no prose, no markdown fences.`;
 
@@ -46,6 +48,11 @@ function buildImagePrompt(category) {
   "accessoryCompatibility": array from [${VALID_ACCESSORY_SLOTS.join(', ')}] naming slots this item pairs well with,
   "neckline": one of [${VALID_NECKLINES.join(', ')}] or null if not applicable (e.g. bottoms, shoes, bags),
   "genderCategory": one of [${VALID_GENDERS.join(', ')}],
+  "isCompleteOutfit": true if this single photographed item, on its own, already forms a complete outfit that should never be paired with an extra top or bottom (e.g. a saree, lehenga set, gown, jumpsuit, kurta set with matching bottom, or a matching co-ord top+bottom set) — false for an individual top, bottom, or standalone layering piece,
+  "texture": one of [${VALID_TEXTURES.join(', ')}],
+  "silhouette": one of [${VALID_SILHOUETTES.join(', ')}] or null if not applicable,
+  "weatherSuitability": one of [${VALID_WEATHER.join(', ')}],
+  "culturalCategory": one of [${VALID_CULTURAL.join(', ')}],
   "details": { "hasHood": boolean, "hasButtons": boolean, "hasZipper": boolean, "hasPockets": boolean, "hasLogo": boolean, "hasBelt": boolean, "isTransparent": boolean },
   "confidence": { "<fieldName>": 0.0-1.0 for each field above, your self-rated certainty }
 }`;
@@ -80,7 +87,8 @@ exports.analyzeWardrobeImage = async function analyzeWardrobeImage(imageUrl, cat
     colorHex: [], colorNames: [], subcategory: '', pattern: '', sleeveLength: '', fit: '',
     materialGuess: '', styleTags: [], suitableSeasons: [], suitableOccasions: [],
     formalityLevel: null, layeringLevel: '', accessoryCompatibility: [],
-    neckline: '', genderCategory: '',
+    neckline: '', genderCategory: '', isCompleteOutfit: false,
+    texture: '', silhouette: '', weatherSuitability: '', culturalCategory: '',
     details: { hasHood: false, hasButtons: false, hasZipper: false, hasPockets: false, hasLogo: false, hasBelt: false, isTransparent: false },
     unverifiedFields: [], aiMeta: { extractedAt: new Date(), provider: '', fieldConfidence: {}, visionAvailable: false },
   };
@@ -140,6 +148,11 @@ exports.analyzeWardrobeImage = async function analyzeWardrobeImage(imageUrl, cat
     accessoryCompatibility: sanitizeEnumArray(parsed.accessoryCompatibility, VALID_ACCESSORY_SLOTS),
     neckline:               sanitizeEnum(parsed.neckline, VALID_NECKLINES),
     genderCategory:         sanitizeEnum(parsed.genderCategory, VALID_GENDERS),
+    isCompleteOutfit:       parsed.isCompleteOutfit === true,
+    texture:                sanitizeEnum(parsed.texture, VALID_TEXTURES),
+    silhouette:             sanitizeEnum(parsed.silhouette, VALID_SILHOUETTES),
+    weatherSuitability:     sanitizeEnum(parsed.weatherSuitability, VALID_WEATHER),
+    culturalCategory:       sanitizeEnum(parsed.culturalCategory, VALID_CULTURAL),
     details: {
       hasHood:       !!parsed.details?.hasHood,
       hasButtons:    !!parsed.details?.hasButtons,
@@ -152,7 +165,14 @@ exports.analyzeWardrobeImage = async function analyzeWardrobeImage(imageUrl, cat
   };
 
   const unverified = Object.entries(fields)
-    .filter(([, v]) => (Array.isArray(v) ? v.length > 0 : v !== '' && v !== null))
+    .filter(([k, v]) => {
+      // A boolean is only worth flagging "AI suggested, please verify" when
+      // it's the notable true case — not on every item where it's just the
+      // default false (unlike string/array fields, an empty value there
+      // already means "nothing detected").
+      if (k === 'isCompleteOutfit') return v === true;
+      return Array.isArray(v) ? v.length > 0 : v !== '' && v !== null;
+    })
     .map(([k]) => k);
 
   return {

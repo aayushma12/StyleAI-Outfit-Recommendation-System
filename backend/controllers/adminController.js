@@ -449,7 +449,7 @@ exports.getCatalogOutfit = async (req, res) => {
 exports.createCatalogOutfit = async (req, res) => {
   const {
     name, description, category, style, occasion, season,
-    colors, fabric, brand, price, imageUrl, publicId, tags,
+    colors, fabric, brand, price, imageUrl, publicId, imageVerified, tags,
   } = req.body;
 
   if (!name || !category) return res.status(400).json({ message: 'Name and category are required.' });
@@ -467,6 +467,10 @@ exports.createCatalogOutfit = async (req, res) => {
     price:    price != null ? Number(price) : null,
     imageUrl: (imageUrl || '').trim(),
     publicId: (publicId || '').trim(),
+    // Only trustable when explicitly true (a real upload, or an admin's
+    // explicit manual-URL confirmation) — never inferred from imageUrl being
+    // present, since a pasted URL alone proves nothing about its accuracy.
+    imageVerified: imageVerified === true,
     tags:     Array.isArray(tags) ? tags : [],
     addedBy:  req.user._id,
   });
@@ -480,7 +484,7 @@ exports.updateCatalogOutfit = async (req, res) => {
   if (!outfit) return res.status(404).json({ message: 'Outfit not found.' });
 
   const fields = ['name', 'description', 'category', 'style', 'occasion', 'season',
-    'colors', 'fabric', 'brand', 'price', 'imageUrl', 'publicId', 'tags', 'isApproved', 'isActive', 'popularity'];
+    'colors', 'fabric', 'brand', 'price', 'imageUrl', 'publicId', 'imageVerified', 'tags', 'isApproved', 'isActive', 'popularity'];
 
   fields.forEach(f => {
     if (req.body[f] !== undefined) outfit[f] = req.body[f];

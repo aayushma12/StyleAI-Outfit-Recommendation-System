@@ -12,6 +12,7 @@ import StyleProfileView from './StyleProfileView';
 import History from './History';
 import AIAssistant from './AIAssistant';
 import RecommendationPanel from '../components/RecommendationPanel';
+import SmartRecommendationWizard from '../components/SmartRecommendationWizard';
 import InsightsPanel from '../components/InsightsPanel';
 import DailyOutfitCard from '../components/DailyOutfitCard';
 import './Dashboard.css';
@@ -66,39 +67,8 @@ const NAV_ITEMS = [
   { id: 'settings',  label: 'Settings',        icon: 'settings' },
 ];
 
-const COLOR_MAP = {
-  red:'#EF4444', pink:'#06B6D4', orange:'#F97316', yellow:'#EAB308',
-  green:'#22C55E', teal:'#14B8A6', blue:'#3B82F6', purple:'#A855F7',
-  black:'#1F2937', white:'#F3F4F6', beige:'#D4B896', maroon:'#7F1D1D',
-  navy:'#1E3A5F', olive:'#808000', gold:'#D97706', rose:'#FB7185',
-};
-
 const getGreeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
 const formatDate  = () => new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-
-const OUTFIT_CATEGORIES = [
-  { emoji: '👕', label: 'Casual',             desc: 'Everyday relaxed style',        prompt: 'Generate a casual everyday outfit for me based on my wardrobe and preferences' },
-  { emoji: '💼', label: 'Formal',             desc: 'Elegant and professional',       prompt: 'Generate a formal elegant outfit for me' },
-  { emoji: '🏢', label: 'Office Wear',        desc: 'Smart professional look',        prompt: 'Generate an office-appropriate professional outfit for me' },
-  { emoji: '🎒', label: 'College',            desc: 'Cool campus style',              prompt: 'Generate a stylish college campus outfit for me' },
-  { emoji: '🎉', label: 'Party',              desc: 'Stand out & have fun',           prompt: 'Generate a fun party outfit for me' },
-  { emoji: '💒', label: 'Wedding Guest',      desc: 'Celebratory & tasteful',         prompt: 'Generate a wedding guest outfit for me' },
-  { emoji: '🎪', label: 'Festival',           desc: 'Vibrant & expressive',           prompt: 'Generate a vibrant festival outfit for me' },
-  { emoji: '🪔', label: 'Traditional',        desc: 'Cultural & ethnic styles',       prompt: 'Generate a traditional cultural outfit for me' },
-  { emoji: '✈️', label: 'Travel',             desc: 'Comfortable yet chic',           prompt: 'Generate a comfortable travel outfit for me' },
-  { emoji: '💕', label: 'Date Night',         desc: 'Romantic & confident',           prompt: 'Generate a romantic date night outfit for me' },
-  { emoji: '🏋️', label: 'Gym & Sport',        desc: 'Active & performance-ready',     prompt: 'Generate an activewear gym outfit for me' },
-  { emoji: '🌧️', label: 'Rainy Day',          desc: 'Stylish rain-ready look',        prompt: 'Generate a stylish rainy day outfit for me' },
-  { emoji: '🤝', label: 'Business Meeting',   desc: 'Confident & polished',           prompt: 'Generate a business meeting outfit for me' },
-  { emoji: '🌙', label: 'Evening Wear',       desc: 'Sophisticated night look',       prompt: 'Generate a sophisticated evening outfit for me' },
-  { emoji: '✨', label: 'Smart Casual',       desc: 'Effortlessly put-together',      prompt: 'Generate a smart casual outfit for me' },
-  { emoji: '🛹', label: 'Streetwear',         desc: 'Urban cool & trendy',            prompt: 'Generate a trendy streetwear outfit for me' },
-  { emoji: '📋', label: 'Interview',          desc: 'Make a great first impression',  prompt: 'Generate an interview outfit for me' },
-  { emoji: '🏕️', label: 'Outdoor Adventure',  desc: 'Ready for the outdoors',         prompt: 'Generate an outdoor adventure outfit for me' },
-  { emoji: '🎯', label: 'Minimalist',         desc: 'Clean lines, less is more',      prompt: 'Generate a minimalist capsule outfit for me' },
-  { emoji: '☕', label: 'Weekend Casual',     desc: 'Relaxed weekend vibes',          prompt: 'Generate a relaxed weekend casual outfit for me' },
-];
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -110,29 +80,26 @@ export default function Dashboard() {
   const [showProfile, setShowProfile]     = useState(false);
   const profileRef = useRef(null);
 
-  const [stats, setStats] = useState({ wardrobe: 0, saved: 0, calendar: 0, feedback: 0 });
+  const [stats, setStats] = useState({ wardrobe: 0, saved: 0, utilization: 0 });
   // Tracks which stats failed to load, so the UI can show "—" instead of a
   // misleading "0" (a failed request and a genuinely empty wardrobe/saved
   // list previously looked identical to the user).
   const [statsFailed, setStatsFailed]   = useState({ wardrobe: false, saved: false });
   const [statsLoading, setStatsLoading] = useState(true);
-  const [aiInitialPrompt, setAiInitialPrompt] = useState(null);
+  const [wizardSession, setWizardSession] = useState(null);
+  const [showWizard, setShowWizard]       = useState(false);
 
   const firstName  = user?.name?.split(' ')[0] || 'there';
-  const colors     = user?.colorPreferences?.slice(0, 8) || [];
 
   useEffect(() => {
     Promise.all([
       api.get('/wardrobe/stats').catch(() => null),
       api.get('/wardrobe/outfits/saved').catch(() => null),
-      api.get(`/calendar?year=${new Date().getFullYear()}&month=${new Date().getMonth()+1}`).catch(() => null),
-      api.get('/app-feedback').catch(() => null),
-    ]).then(([wardrobeRes, savedRes, calendarRes, feedbackRes]) => {
+    ]).then(([wardrobeRes, savedRes]) => {
       setStats({
-        wardrobe: wardrobeRes?.data?.total              || 0,
-        saved:    savedRes?.data?.combinations?.length  || 0,
-        calendar: calendarRes?.data?.entries?.length    || 0,
-        feedback: feedbackRes?.data?.feedbacks?.length  || 0,
+        wardrobe:    wardrobeRes?.data?.total             || 0,
+        saved:       savedRes?.data?.combinations?.length || 0,
+        utilization: wardrobeRes?.data?.utilizationRate   || 0,
       });
       setStatsFailed({ wardrobe: !wardrobeRes, saved: !savedRes });
       setStatsLoading(false);
@@ -271,19 +238,38 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Daily AI Outfit — hero position */}
+              {/* Today's AI Outfit Recommendation — hero position */}
               <DailyOutfitCard
                 userName={user?.name}
                 onNavigate={setActiveSection}
               />
 
-              {/* Stats */}
+              {/* Generate Personalized Recommendation — a single prominent CTA;
+                  the actual 3-question flow lives in a modal so the page stays
+                  spacious until the user chooses to generate something. */}
+              <button type="button" className="db-generate-cta" onClick={() => setShowWizard(true)}>
+                <span className="db-generate-cta-icon"><Icon d={Icons.sparkle} size={22} /></span>
+                <span className="db-generate-cta-text">
+                  <span className="db-generate-cta-title">Generate Personalized Recommendation</span>
+                  <span className="db-generate-cta-sub">Answer 3 quick questions — get a full outfit in under a minute</span>
+                </span>
+              </button>
+
+              {showWizard && (
+                <SmartRecommendationWizard
+                  onClose={() => setShowWizard(false)}
+                  onSessionReady={setWizardSession}
+                />
+              )}
+
+              {wizardSession && <RecommendationPanel newSession={wizardSession} />}
+
+              {/* Quick stats */}
               <div className="db-stats-row">
                 {[
-                  { label: 'Wardrobe Items',  val: stats.wardrobe,  icon: 'hanger',   color: '#D97706', section: 'wardrobe', failed: statsFailed.wardrobe },
-                  { label: 'Saved Outfits',   val: stats.saved,     icon: 'bookmark',  color: '#0D9488', section: 'saved',    failed: statsFailed.saved },
-                  { label: 'Outfit Builder',  val: '',              icon: 'layers',    color: '#0EA5E9', section: 'builder' },
-                  { label: 'Outfit Calendar', val: '',              icon: 'calendar',  color: '#059669', section: 'calendar' },
+                  { label: 'Wardrobe Items',       val: stats.wardrobe,                      icon: 'hanger',   color: '#D97706', section: 'wardrobe', failed: statsFailed.wardrobe },
+                  { label: 'Saved Outfits',        val: stats.saved,                         icon: 'bookmark', color: '#0D9488', section: 'saved',    failed: statsFailed.saved },
+                  { label: 'Wardrobe Utilization', val: `${stats.utilization}%`,              icon: 'trending', color: '#0EA5E9', section: 'wardrobe', failed: statsFailed.wardrobe },
                 ].map(s => (
                   <div key={s.label} className="db-stat-card" onClick={() => setActiveSection(s.section)} style={{ cursor: 'pointer' }}
                     role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setActiveSection(s.section)}>
@@ -291,102 +277,17 @@ export default function Dashboard() {
                       <Icon d={Icons[s.icon]} size={20} />
                     </div>
                     <div className="db-stat-body">
-                      {s.val !== '' && (
-                        statsLoading ? (
-                          <span className="skeleton skeleton-text" style={{ width: 28, height: 18, display: 'inline-block' }} />
-                        ) : s.failed ? (
-                          <span className="db-stat-val" style={{ color: 'var(--text-muted)' }} title="Couldn't load this — try refreshing">—</span>
-                        ) : (
-                          <span className="db-stat-val" style={{ color: s.color }}>{s.val}</span>
-                        )
+                      {statsLoading ? (
+                        <span className="skeleton skeleton-text" style={{ width: 28, height: 18, display: 'inline-block' }} />
+                      ) : s.failed ? (
+                        <span className="db-stat-val" style={{ color: 'var(--text-muted)' }} title="Couldn't load this — try refreshing">—</span>
+                      ) : (
+                        <span className="db-stat-val" style={{ color: s.color }}>{s.val}</span>
                       )}
                       <span className="db-stat-lbl">{s.label}</span>
                     </div>
                   </div>
                 ))}
-              </div>
-
-              {/* Personalized Outfit Recommendations */}
-              <div className="db-outfit-cats-section">
-                <div className="db-outfit-cats-header">
-                  <h3 className="db-outfit-cats-title">
-                    <Icon d={Icons.sparkle} size={16} /> Personalized Outfit Recommendations
-                  </h3>
-                  <p className="db-outfit-cats-sub">Pick a style and let StyleAI create the perfect outfit for you</p>
-                </div>
-                <div className="db-outfit-cats-grid">
-                  {OUTFIT_CATEGORIES.map(cat => (
-                    <button
-                      key={cat.label}
-                      className="db-outfit-cat-card"
-                      onClick={() => { setAiInitialPrompt(cat.prompt); setActiveSection('ai'); }}
-                    >
-                      <span className="db-outfit-cat-icon">{cat.emoji}</span>
-                      <span className="db-outfit-cat-name">{cat.label}</span>
-                      <span className="db-outfit-cat-desc">{cat.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <RecommendationPanel />
-
-              {/* Style Profile Card */}
-              <div className="db-two-row">
-                <div className="db-card db-profile-card">
-                  <div className="db-card-header">
-                    <div className="db-card-title">Your Style Profile</div>
-                    <button className="db-card-btn" onClick={() => setActiveSection('profile')}>Edit →</button>
-                  </div>
-                  <div className="db-profile-type">
-                    <div className="db-profile-type-badge"><Icon d={Icons.star} size={16} /></div>
-                    <div>
-                      <div className="db-profile-type-name">{user?.name}</div>
-                      <div className="db-profile-type-sub">{user?.email}</div>
-                    </div>
-                  </div>
-                  {colors.length > 0 && (
-                    <div className="db-profile-section">
-                      <div className="db-profile-lbl">Favourite Colors</div>
-                      <div className="db-profile-colors">
-                        {colors.map(c => (
-                          <span key={c} className="db-color-dot" title={c}
-                            style={{ background: COLOR_MAP[c] || '#999', boxShadow: c === 'white' ? 'inset 0 0 0 1px #D1D5DB' : 'none' }} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {(user?.occasionPreferences || []).length > 0 && (
-                    <div className="db-profile-section">
-                      <div className="db-profile-lbl">Occasions</div>
-                      <div className="db-profile-occ">
-                        {(user.occasionPreferences || []).slice(0, 4).map(o => (
-                          <span key={o} className="db-occ-chip">{cap(o)}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Getting Started */}
-                <div className="db-card db-insight-card">
-                  <div className="db-card-header">
-                    <div className="db-card-title">Getting Started</div>
-                  </div>
-                  <div className="db-insight-body">
-                    {[
-                      { step: '1', text: 'Upload your clothing items to My Wardrobe',  section: 'wardrobe' },
-                      { step: '2', text: 'Use Outfit Builder to create combinations',   section: 'builder' },
-                      { step: '3', text: 'Plan your week with Outfit Calendar',         section: 'calendar' },
-                    ].map(s => (
-                      <div key={s.step} className="db-step" onClick={() => setActiveSection(s.section)}
-                        role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setActiveSection(s.section)}>
-                        <span className="db-step-num">{s.step}</span>
-                        <span className="db-step-text">{s.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -394,12 +295,7 @@ export default function Dashboard() {
           {activeSection === 'wardrobe'  && <Wardrobe />}
           {activeSection === 'builder'   && <OutfitBuilder />}
           {activeSection === 'calendar'  && <OutfitCalendar />}
-          {activeSection === 'ai'        && (
-            <AIAssistant
-              initialPrompt={aiInitialPrompt}
-              onPromptConsumed={() => setAiInitialPrompt(null)}
-            />
-          )}
+          {activeSection === 'ai'        && <AIAssistant />}
           {activeSection === 'insights'  && (
             <div className="db-overview">
               <div className="db-greeting-card">

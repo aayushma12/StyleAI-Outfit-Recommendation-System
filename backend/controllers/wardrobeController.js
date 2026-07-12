@@ -5,13 +5,15 @@ const logActivity   = require('../utils/historyLogger');
 const { logBehavior } = require('../services/behaviorService');
 const visionExtraction = require('../services/visionExtractionService');
 const outfitPreview = require('../services/outfitPreviewService');
+const { generateWardrobeUtilizationReport } = require('../services/personalizedLearningService');
 const { escapeRegex } = require('../utils/validation');
 const { isAllowedImageUrl } = require('../utils/urlSafety');
 
 const AI_METADATA_FIELDS = [
   'subcategory', 'colorHex', 'pattern', 'fit', 'formalityLevel', 'layeringLevel', 'sleeveLength',
   'suitableSeasons', 'suitableOccasions', 'styleTags', 'accessoryCompatibility', 'materialGuess',
-  'neckline', 'genderCategory', 'details',
+  'neckline', 'genderCategory', 'details', 'isCompleteOutfit',
+  'texture', 'silhouette', 'weatherSuitability', 'culturalCategory',
 ];
 
 exports.getItems = async (req, res) => {
@@ -60,6 +62,7 @@ exports.createItem = async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ message: 'Item name is required.' });
   if (!category)     return res.status(400).json({ message: 'Category is required.' });
   if (!color?.trim()) return res.status(400).json({ message: 'Color is required.' });
+  if (!occasion?.trim()) return res.status(400).json({ message: 'Occasion is required.' });
 
   const metadata = {};
   AI_METADATA_FIELDS.forEach(f => { if (req.body[f] !== undefined) metadata[f] = req.body[f]; });
@@ -178,7 +181,7 @@ exports.deleteItem = async (req, res) => {
 
 exports.getStats = async (req, res) => {
   const userId = req.user._id;
-  const [total, categoryBreakdown, colorBreakdown, occasionBreakdown, seasonBreakdown, aiTaggedCount, verifiedCount] = await Promise.all([
+  const [total, categoryBreakdown, colorBreakdown, occasionBreakdown, seasonBreakdown, aiTaggedCount, verifiedCount, utilizationReport] = await Promise.all([
     WardrobeItem.countDocuments({ user: userId }),
     WardrobeItem.aggregate([
       { $match: { user: userId } },
@@ -204,9 +207,10 @@ exports.getStats = async (req, res) => {
     ]),
     WardrobeItem.countDocuments({ user: userId, 'aiMeta.extractedAt': { $ne: null } }),
     WardrobeItem.countDocuments({ user: userId, metadataReviewed: true }),
+    generateWardrobeUtilizationReport(userId),
   ]);
 
-  const ALL_CATS = ['tops','bottoms','dresses','jackets','footwear','accessories','traditional'];
+  const ALL_CATS = ['tops', 'bottoms', 'dresses', 'footwear', 'accessories'];
   const coveredCats = categoryBreakdown.filter(c => ALL_CATS.includes(c._id)).length;
 
   res.json({
@@ -221,6 +225,7 @@ exports.getStats = async (req, res) => {
     aiTaggedCount,
     verifiedCount,
     aiTaggedPercent: total > 0 ? Math.round((aiTaggedCount / total) * 100) : 0,
+    utilizationRate: utilizationReport.utilizationRate,
   });
 };
 
