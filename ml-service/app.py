@@ -17,6 +17,7 @@ logging.basicConfig(
 
 import ml_engine  # noqa: E402 — imported after logging config so its module-level logger inherits it
 import ranking_metrics  # noqa: E402 — same reasoning
+import compat_engine  # noqa: E402 — same reasoning
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +48,23 @@ if ml_engine.load() is None:
 else:
     logger.info('Acceptance model loaded successfully at startup.')
 
+# Pre-load the Polyvore compatibility model too — independent of the
+# acceptance model above, so one being missing never blocks the other.
+if compat_engine.load() is None:
+    logger.warning('Starting with no compat model loaded — /predict-compat-batch will return 503 until `npm run fetch:polyvore && npm run train:compat` has been run.')
+else:
+    logger.info('Polyvore compatibility model loaded successfully at startup.')
+
 
 @app.route('/health', methods=['GET'])
 def health():
     info = ml_engine.get_model_info()
+    compat_info = compat_engine.get_model_info()
     return jsonify({
         'status': 'ok',
         'service': 'StyleAI Acceptance-Prediction ML Service',
         'modelLoaded': info['modelLoaded'],
+        'compatModelLoaded': compat_info['modelLoaded'],
     })
 
 
@@ -90,6 +100,43 @@ def predict_acceptance_batch():
 def model_info():
     """Model metadata including accuracy/precision/recall/F1/ROC-AUC/confusion matrix."""
     return jsonify(ml_engine.get_model_info())
+
+
+# ── Polyvore compatibility model endpoints ──────────────────────────────────
+# Independent second signal — see compat_engine.py / polyvore_compat_trainer.py.
+# No /retrain-compat route: the Polyvore dataset is static, so retraining is
+# an occasional offline CLI step (`npm run train:compat`), not a live action.
+
+@app.route('/predict-compat-batch', methods=['POST'])
+def predict_compat_batch():
+    """
+    Batch dataset-compatibility-probability prediction, same one-round-trip-
+    per-session shape as /predict-acceptance-batch.
+
+    Body: { samples: [ {numItems, numTops, numBottoms, numDresses, numFootwear,
+                         numAccessories, categoryDiversity, hasDressAndBottom,
+                         numColorsDetected, numNeutralColors, numNonNeutralColors,
+                         hasMultipleHues, avgPairwiseHueDistance, minPairwiseHueDistance}, ... ] }
+    """
+    data = request.get_json(silent=True) or {}
+    samples = data.get('samples', [])
+    if not samples:
+        logger.info('predict-compat-batch: empty samples array, nothing to predict.')
+        return jsonify({'predictions': []})
+
+    logger.info('predict-compat-batch: scoring %d sample(s).', len(samples))
+    predictions = compat_engine.get_compat_predictions(samples)
+    if predictions is None:
+        logger.warning('predict-compat-batch: model unavailable or prediction failed for %d sample(s).', len(samples))
+        return jsonify({'error': 'Compat model not loaded — run `npm run train:compat`.', 'predictions': []}), 503
+    logger.info('predict-compat-batch: returned %d prediction(s).', len(predictions))
+    return jsonify({'predictions': predictions})
+
+
+@app.route('/compat-model-info', methods=['GET'])
+def compat_model_info():
+    """Polyvore compat model metadata — algorithm, real test-set metrics, dataset provenance."""
+    return jsonify(compat_engine.get_model_info())
 
 
 @app.route('/feature-importance', methods=['GET'])

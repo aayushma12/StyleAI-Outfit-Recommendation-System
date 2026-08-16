@@ -120,26 +120,18 @@ const BODY_TYPES = [
   { value: 'inverted_triangle', label: 'Inv. Triangle', desc: 'Broader shoulders, slim hips' },
 ];
 
-const BUDGET_PRESETS = [
-  { label: 'Budget', min: 500, max: 2000 },
-  { label: 'Mid-range', min: 2000, max: 5000 },
-  { label: 'Premium', min: 5000, max: 15000 },
-  { label: 'Luxury', min: 15000, max: 99999 },
-];
-
 export default function Register() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '', consentGiven: false,
     age: '', height: '', weight: '', skinTone: '', bodyType: '',
-    favoriteColors: [], fashionStyles: [], budgetMin: 500, budgetMax: 5000,
+    favoriteColors: [], fashionStyles: [],
   });
   const [errors, setErrors] = useState({});
   const [globalError, setGlobalError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPwd,  setShowPwd]  = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [emailVerifSent, setEmailVerifSent] = useState(false);
   const { refreshUser } = useAuth();
   const navigate = useNavigate();
 
@@ -175,7 +167,6 @@ export default function Register() {
       const age = Number(form.age);
       if (!form.age || age < 13 || age > 80) e.age = 'Please enter a valid age (13–80)';
       if (!form.bodyType) e.bodyType = 'Please select your body type';
-      if (Number(form.budgetMin) > Number(form.budgetMax)) e.budget = 'Minimum budget cannot exceed maximum';
     }
     if (s === 2) {
       if (form.fashionStyles.length === 0) e.fashionStyles = 'Select at least one style';
@@ -197,14 +188,13 @@ export default function Register() {
     setLoading(true);
     setGlobalError('');
     try {
-      const regRes = await api.post('/auth/register', {
+      // Backend sets an httpOnly cookie on registration — no localStorage needed.
+      await api.post('/auth/register', {
         name: form.name,
         email: form.email,
         password: form.password,
         consentGiven: 'true',
       });
-      // Backend sets an httpOnly cookie on registration — no localStorage needed.
-      if (regRes.data.emailVerificationSent) setEmailVerifSent(true);
 
       await api.post('/users/onboarding', {
         age: parseInt(form.age, 10),
@@ -216,7 +206,6 @@ export default function Register() {
         culturalBackground: 'Nepali',
         occasionPreferences: ['daily', 'college', 'festival'],
         colorPreferences: form.favoriteColors,
-        budgetRange: { min: Number(form.budgetMin), max: Number(form.budgetMax) },
       });
 
       // Show step 3 WITHOUT authenticating in React context yet.
@@ -436,30 +425,6 @@ export default function Register() {
                 </div>
               </Field>
 
-              <Field label="Budget Range (NPR)" hint="Per outfit">
-                <div className="rg-budget-quick">
-                  {BUDGET_PRESETS.map(p => (
-                    <button key={p.label} type="button"
-                      className={`rg-budget-preset ${form.budgetMin === p.min && form.budgetMax === p.max ? 'active' : ''}`}
-                      onClick={() => { set('budgetMin', p.min); set('budgetMax', p.max); }}>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="rg-budget-inputs">
-                  <div className="rg-budget-box">
-                    <label>Min (NPR)</label>
-                    <input type="number" value={form.budgetMin} min={0}
-                      onChange={e => set('budgetMin', Number(e.target.value))} />
-                  </div>
-                  <span className="rg-budget-sep">—</span>
-                  <div className="rg-budget-box">
-                    <label>Max (NPR)</label>
-                    <input type="number" value={form.budgetMax} min={0}
-                      onChange={e => set('budgetMax', Number(e.target.value))} />
-                  </div>
-                </div>
-              </Field>
             </div>
           )}
 
@@ -473,21 +438,6 @@ export default function Register() {
                 Welcome, <strong>{firstName}</strong>! Your personalised style profile is ready.
                 Let's discover outfits made just for you.
               </p>
-              {emailVerifSent && (
-                <div style={{
-                  margin: '0 0 16px',
-                  padding: '12px 16px',
-                  background: '#F5F3FF',
-                  border: '1.5px solid #DDD6FE',
-                  borderRadius: 10,
-                  fontSize: '0.82rem',
-                  color: '#4C1D95',
-                  lineHeight: 1.55,
-                  textAlign: 'left',
-                }}>
-                  📧 <strong>Verify your email</strong> — We sent a verification link to <strong>{form.email}</strong>. Please check your inbox to activate full account features.
-                </div>
-              )}
               <div className="rg-success-stats">
                 <div className="rg-success-stat">
                   <span>{form.fashionStyles.length || '—'}</span>

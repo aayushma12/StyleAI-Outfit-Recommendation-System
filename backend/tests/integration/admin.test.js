@@ -12,7 +12,7 @@ const ADMIN_PASSWORD = 'StrongAdmin@Pass1';
 async function mkAdminToken() {
   await User.create({
     name: 'Test Admin', email: `admin-${Date.now()}-${Math.random()}@example.com`,
-    password: ADMIN_PASSWORD, consentGiven: true, role: 'admin', emailVerified: true,
+    password: ADMIN_PASSWORD, consentGiven: true, role: 'admin',
   });
   const email = (await User.findOne({ role: 'admin' }).sort({ createdAt: -1 })).email;
   const res = await request(app).post('/api/auth/login').send({ email, password: ADMIN_PASSWORD });

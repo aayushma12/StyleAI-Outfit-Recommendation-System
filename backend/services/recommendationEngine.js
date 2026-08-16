@@ -63,6 +63,7 @@ function scoresFromBreakdown(breakdown) {
     bodyTypeMatch:   breakdown['Body Type Match'],
     fabricMatch:     breakdown['Fabric Match'],
     trendScore:      breakdown['Trend Score'],
+    comfortMatch:    breakdown['Comfort Match'],
   };
   // Wizard-only — only present in breakdown for wizard sessions where the
   // corresponding field carried real signal (see scoringService.js).
@@ -70,7 +71,6 @@ function scoresFromBreakdown(breakdown) {
   if (breakdown['Indoor/Outdoor Fit'] !== undefined) scores.indoorOutdoorFit = breakdown['Indoor/Outdoor Fit'];
   if (breakdown['Day/Night Fit']      !== undefined) scores.dayNightFit      = breakdown['Day/Night Fit'];
   if (breakdown['Vibe Match']         !== undefined) scores.vibeMatch        = breakdown['Vibe Match'];
-  if (breakdown['Budget Fit']         !== undefined) scores.budgetFit        = breakdown['Budget Fit'];
   return scores;
 }
 
@@ -98,6 +98,7 @@ function buildRankedFromScored(catMeta, scored, rank, explanation, explanationSo
     tips: buildTips(context),
     status: 'pending',
     mlAcceptanceProbability: scored.mlAcceptanceProbability,
+    datasetCompatProbability: scored.datasetCompatProbability ?? null,
     explanationSource,
     generationMethod: 'deterministic_v2',
     // Bounded runner-up pool (top 2, computed once here — never regenerated)

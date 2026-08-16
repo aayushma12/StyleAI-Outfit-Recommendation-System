@@ -47,6 +47,7 @@ exports.CATEGORY_WEIGHTS = CATEGORY_WEIGHTS;
 // same style-inference/formality-averaging logic rather than duplicating it.
 exports.inferItemStyles = inferItemStyles;
 exports.avgFormality = avgFormality;
+exports.extractColors = extractColors;
 
 function extractColors(item) {
   if (!item.color) return [];
@@ -246,6 +247,21 @@ function calcFabricScore(outfitItems, userProfile) {
   return rules.fabricPreferenceScore(outfitItems, userProfile.fabricPreferences);
 }
 
+// Maps the user's onboarding comfort-priority answer (1-5, low = casual/
+// laid-back, high = dressed-up/formal — see Onboarding.jsx's COMFORT scale)
+// onto the same 1-4 formality scale outfit items use, then rewards outfits
+// whose actual formality is close to what the user asked for. Neutral 0.5
+// when either side of the comparison has no real signal, matching this
+// file's existing "no forced guess" convention (see computeDresscodeFit).
+function calcComfortScore(outfitItems, userProfile) {
+  const comfortPriority = userProfile.comfortPriority;
+  if (!Number.isFinite(comfortPriority) || comfortPriority < 1 || comfortPriority > 5) return 0.5;
+  const actual = avgFormality(outfitItems);
+  if (actual === null) return 0.5;
+  const targetFormality = 1 + (comfortPriority - 1) * (3 / 4);
+  return Math.max(0, 1 - Math.abs(actual - targetFormality) / 4);
+}
+
 // ── Wizard-only dimensions ───────────────────────────────────────────────────
 // These 5 dimensions only carry real weight in the wizard_option_* categories
 // (see config/scoringWeights.js) — every other category's weight vector never
@@ -344,21 +360,6 @@ function computeVibeMatch(outfitItems, vibe) {
   return Math.min(1, 0.4 + (hits / itemStyles.length) * 0.9);
 }
 
-// Budget is a proxy, not a real price signal — WardrobeItem has no price
-// field (a user's own items are free to re-wear regardless of budget tier).
-// Lower budget tiers reward outfits built mostly from owned items; higher
-// tiers are tolerant of (even expect) more aspirational/suggested slots.
-const BUDGET_OWNED_PREFERENCE = { budget: 0.9, 'mid-range': 0.6, premium: 0.35, luxury: 0.15 };
-
-function computeBudgetFit(outfitSlots, budget) {
-  const preferOwned = BUDGET_OWNED_PREFERENCE[budget];
-  if (preferOwned === undefined) return null;
-  const slots = Object.values(outfitSlots || {}).filter(s => s.name || s.suggestion);
-  if (!slots.length) return 0.5;
-  const ownedRatio = slots.filter(s => s.item).length / slots.length;
-  return preferOwned * ownedRatio + (1 - preferOwned) * (1 - ownedRatio);
-}
-
 // ── Sub-score computation (category-independent) ────────────────────────────
 // Computes the 9 raw 0-1 dimensions for one outfit candidate. Called ONCE per
 // candidate by rankingService, before any category weighting or ML blending —
@@ -376,6 +377,7 @@ exports.computeSubScores = function computeSubScores(outfitItems, outfitSlots, u
     bodyTypeMatch:  calcBodyTypeScore(outfitItems, userProfile),
     fabricMatch:    calcFabricScore(outfitItems, userProfile),
     trendScore:     calcTrendScore(outfitItems, insights, signals.kathmanduContext || {}),
+    comfortMatch:   calcComfortScore(outfitItems, userProfile),
   };
 
   // Wizard-only — only present in `context` for wizard sessions (see
@@ -386,22 +388,29 @@ exports.computeSubScores = function computeSubScores(outfitItems, outfitSlots, u
   const indoorOutdoorFit = computeIndoorOutdoorFit(outfitSlots, context.indoorOutdoor, context.weather);
   const dayNightFit      = computeDayNightFit(outfitItems, context.dayNight);
   const vibeMatch        = computeVibeMatch(outfitItems, context.vibe);
-  const budgetFit        = computeBudgetFit(outfitSlots, context.budget);
 
   if (dresscodeFit     !== null) scores.dresscodeFit     = dresscodeFit;
   if (indoorOutdoorFit !== null) scores.indoorOutdoorFit = indoorOutdoorFit;
   if (dayNightFit      !== null) scores.dayNightFit      = dayNightFit;
   if (vibeMatch        !== null) scores.vibeMatch        = vibeMatch;
-  if (budgetFit        !== null) scores.budgetFit        = budgetFit;
 
   return scores;
 };
 
 // ── Category-weighted finalization ───────────────────────────────────────────
-// Applies category weights to the 9 sub-scores, then optionally blends in the
+// Applies category weights to the 10 sub-scores, then optionally blends in the
 // trained ML acceptance-probability as one further, separate signal (kept
-// outside the 9 dimensions entirely to avoid the circularity of feeding a
+// outside the 10 dimensions entirely to avoid the circularity of feeding a
 // model's own inputs back into itself).
+//
+// Note: the Polyvore-trained compat model's `datasetCompatProbability` (see
+// rankingService.js/mlBridgeService.js) is deliberately NOT threaded through
+// here or blended into `confidence` — Phase 1 keeps it a visible, independent
+// signal attached directly to the ranked result and persisted Recommendation
+// doc ("does a model trained on real curated human outfits agree with our
+// own ranking?"), not folded into this function's weighted math. Blending it
+// in is a later phase, gated on backtesting it against real Recommendation
+// outcomes to justify a specific weight — see POLYVORE_COMPAT.md.
 exports.finalizeScore = function finalizeScore(scores, category = 'best_match', mlAcceptanceProbability = null) {
   const weights = CATEGORY_WEIGHTS[category] || CATEGORY_WEIGHTS.best_match;
 
@@ -429,15 +438,15 @@ exports.finalizeScore = function finalizeScore(scores, category = 'best_match', 
     'Body Type Match':  Math.round(scores.bodyTypeMatch  * 100),
     'Fabric Match':     Math.round(scores.fabricMatch    * 100),
     'Trend Score':      Math.round(scores.trendScore     * 100),
+    'Comfort Match':    Math.round(scores.comfortMatch    * 100),
   };
   // Wizard-only dimensions — only added to the breakdown when they were
   // actually computed (i.e. a wizard session supplied real signal for them),
-  // so the standard 9-dimension XAI panel radar chart is completely unaffected.
+  // so the standard 10-dimension XAI panel radar chart is completely unaffected.
   if (scores.dresscodeFit     !== undefined) breakdown['Dresscode Fit']      = Math.round(scores.dresscodeFit     * 100);
   if (scores.indoorOutdoorFit !== undefined) breakdown['Indoor/Outdoor Fit'] = Math.round(scores.indoorOutdoorFit * 100);
   if (scores.dayNightFit      !== undefined) breakdown['Day/Night Fit']     = Math.round(scores.dayNightFit      * 100);
   if (scores.vibeMatch        !== undefined) breakdown['Vibe Match']        = Math.round(scores.vibeMatch        * 100);
-  if (scores.budgetFit        !== undefined) breakdown['Budget Fit']        = Math.round(scores.budgetFit        * 100);
 
   return { confidence, breakdown, ruleScore };
 };

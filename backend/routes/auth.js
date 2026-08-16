@@ -8,11 +8,8 @@ const {
   login,
   logout,
   getMe,
-  verifyEmail,
-  resendVerification,
-  verifyResetToken,
   forgotPassword,
-  resetPassword,
+  resetPasswordWithOtp,
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
@@ -67,19 +64,7 @@ router.post('/login', [
 router.get('/me', protect, getMe);
 router.post('/logout', logout);
 
-// ── Email verification ────────────────────────────────────────────────────────
-router.get('/verify-email/:token', verifyEmail);
-
-router.post('/resend-verification', [
-  body('email')
-    .isEmail().withMessage('Valid email address is required')
-    .normalizeEmail(),
-  checkValidation,
-], resendVerification);
-
-// ── Password reset ────────────────────────────────────────────────────────────
-router.get('/verify-reset-token/:token', verifyResetToken);
-
+// ── Password reset (email OTP) ─────────────────────────────────────────────────
 router.post('/forgot-password', [
   body('email')
     .notEmpty().withMessage('Email address is required.')
@@ -88,7 +73,15 @@ router.post('/forgot-password', [
   checkValidation,
 ], forgotPassword);
 
-router.post('/reset-password/:token', [
+router.post('/reset-password-otp', [
+  body('email')
+    .notEmpty().withMessage('Email address is required.')
+    .isEmail().withMessage('Please enter a valid email address.')
+    .normalizeEmail(),
+  body('otp')
+    .notEmpty().withMessage('Reset code is required.')
+    .isLength({ min: 6, max: 6 }).withMessage('Reset code must be 6 digits.')
+    .isNumeric().withMessage('Reset code must be 6 digits.'),
   body('password')
     .notEmpty().withMessage('Password is required.')
     .isLength({ min: 8 }).withMessage('Password must be at least 8 characters.')
@@ -97,6 +90,6 @@ router.post('/reset-password/:token', [
     .matches(/[0-9]/).withMessage('Password must include at least one number.')
     .matches(/[^A-Za-z0-9]/).withMessage('Password must include at least one special character.'),
   checkValidation,
-], resetPassword);
+], resetPasswordWithOtp);
 
 module.exports = router;

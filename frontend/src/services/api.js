@@ -15,9 +15,7 @@ const AUTH_PATHS = [
   '/auth/logout',
   '/auth/me',
   '/auth/forgot-password',
-  '/auth/reset-password',
-  '/auth/verify-email',
-  '/auth/resend',
+  '/auth/reset-password-otp',
 ];
 
 const isAuthEndpoint = (url = '') =>

@@ -31,11 +31,11 @@ const FEEDBACK_TYPES = [
 ];
 
 const SATISFACTION_LEVELS = [
-  { val: 1, label: 'Very Dissatisfied', color: '#EF4444' },
-  { val: 2, label: 'Dissatisfied',      color: '#F97316' },
-  { val: 3, label: 'Neutral',           color: '#EAB308' },
-  { val: 4, label: 'Satisfied',         color: '#22C55E' },
-  { val: 5, label: 'Very Satisfied',    color: '#0D9488' },
+  { val: 1, label: 'Very Dissatisfied', color: '#EF4444', emoji: '😠' },
+  { val: 2, label: 'Dissatisfied',      color: '#F97316', emoji: '🙁' },
+  { val: 3, label: 'Neutral',           color: '#EAB308', emoji: '😐' },
+  { val: 4, label: 'Satisfied',         color: '#22C55E', emoji: '🙂' },
+  { val: 5, label: 'Very Satisfied',    color: '#0D9488', emoji: '😍' },
 ];
 
 const REC_LABELS = ['', 'Very Inaccurate', 'Inaccurate', 'Neutral', 'Accurate', 'Very Accurate'];

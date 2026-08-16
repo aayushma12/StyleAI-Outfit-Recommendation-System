@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -37,13 +37,6 @@ const OCCASIONS = [
   { id: 'party',   label: 'Party',    icon: '🎉', desc: 'Celebrations & socials' },
   { id: 'wedding', label: 'Wedding',  icon: '💒', desc: 'Ceremonies & receptions' },
   { id: 'festival',label: 'Festival', icon: '🪔', desc: 'Dashain, Tihar & cultural events' },
-];
-
-const BUDGETS = [
-  { id: 'budget',   label: 'Budget Friendly', range: 'NPR 500 – 2,000',   icon: '💚', desc: 'Affordable everyday finds',       min: 500,   max: 2000  },
-  { id: 'midrange', label: 'Mid Range',        range: 'NPR 2,000 – 5,000', icon: '💛', desc: 'Quality meets great value',       min: 2000,  max: 5000  },
-  { id: 'premium',  label: 'Premium',          range: 'NPR 5,000 – 15,000',icon: '🔶', desc: 'Elevated fashion pieces',         min: 5000,  max: 15000 },
-  { id: 'luxury',   label: 'Luxury',           range: 'NPR 15,000+',       icon: '💎', desc: 'Designer & exclusive labels',     min: 15000, max: 99999 },
 ];
 
 const COMFORT = [
@@ -87,14 +80,13 @@ const QUESTIONS = [
   { key: 'fashionStyle', title: 'What fashion style are you?', sub: 'Pick the one that feels most like you.' },
   { key: 'favoriteColors', title: 'What are your favourite colours?', sub: 'Choose all that speak to your wardrobe.' },
   { key: 'occasion', title: 'Where do you dress up most?', sub: 'Pick your most frequent occasion.' },
-  { key: 'budget', title: "What's your outfit budget?", sub: 'Choose the range that fits you best.' },
   { key: 'comfortLevel', title: 'How dressed-up do you like to be?', sub: 'Slide your style comfort scale.' },
   { key: 'inspiration', title: "Who's your fashion inspiration?", sub: 'Pick the vibe that matches your inner style icon.' },
 ];
 
 export default function StyleQuiz() {
   const [phase, setPhase] = useState('intro');   // 'intro' | 0-5 | 'analyzing' | 'result'
-  const [answers, setAnswers] = useState({ fashionStyle: null, favoriteColors: [], occasion: null, budget: null, comfortLevel: null, inspiration: null });
+  const [answers, setAnswers] = useState({ fashionStyle: null, favoriteColors: [], occasion: null, comfortLevel: null, inspiration: null });
   const [msgIdx, setMsgIdx] = useState(0);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -120,35 +112,38 @@ export default function StyleQuiz() {
     return () => { clearInterval(msgTimer); clearInterval(progTimer); clearTimeout(doneTimer); };
   }, [phase]);
 
-  /* Post profile when analyzing starts */
-  useEffect(() => {
-    if (phase !== 'analyzing') return;
-    (async () => {
-      setSaving(true);
-      setError('');
-      try {
-        const budget = BUDGETS.find(b => b.id === answers.budget);
-        const styles = [...new Set([STYLE_MAP[answers.fashionStyle], INSP_MAP[answers.inspiration]].filter(Boolean))];
-        await api.post('/users/onboarding', {
-          // bodyType is collected once, at registration (Register.jsx) — this
-          // quiz never asks about it, so it must pass the real value through
-          // rather than a hardcoded guess, or it would silently overwrite
-          // every user's real body type on every retake.
-          bodyType: user?.bodyType,
-          stylePreferences: styles,
-          occasionPreferences: answers.occasion ? [answers.occasion] : ['daily'],
-          colorPreferences: answers.favoriteColors,
-          budgetRange: { min: budget?.min ?? 500, max: budget?.max ?? 5000 },
-          culturalBackground: 'Nepali',
-        });
-        await refreshUser();
-      } catch (e) {
-        setError('Your style profile couldn’t be saved. You can still explore, or retake the quiz to try again.');
-      } finally {
-        setSaving(false);
-      }
-    })();
-  }, [phase]);
+  // Submits the finished quiz — called directly from goNext() at the moment
+  // it transitions into the 'analyzing' phase, rather than from a useEffect
+  // keyed on `phase`. It must run exactly once, right then, using whatever
+  // answers/user are current at that instant — an effect depending on
+  // `answers`/`user` would legitimately need to list them (per
+  // react-hooks/exhaustive-deps), but including them would re-submit on
+  // every single answer change while still on the quiz, not just once at
+  // the end. A plain function call has no such dependency-array problem.
+  const submitQuizAnswers = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const styles = [...new Set([STYLE_MAP[answers.fashionStyle], INSP_MAP[answers.inspiration]].filter(Boolean))];
+      await api.post('/users/onboarding', {
+        // bodyType is collected once, at registration (Register.jsx) — this
+        // quiz never asks about it, so it must pass the real value through
+        // rather than a hardcoded guess, or it would silently overwrite
+        // every user's real body type on every retake.
+        bodyType: user?.bodyType,
+        stylePreferences: styles,
+        occasionPreferences: answers.occasion ? [answers.occasion] : ['daily'],
+        colorPreferences: answers.favoriteColors,
+        comfortPriority: answers.comfortLevel ?? 3,
+        culturalBackground: 'Nepali',
+      });
+      await refreshUser();
+    } catch (e) {
+      setError('Your style profile couldn’t be saved. You can still explore, or retake the quiz to try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const set = (key, val) => setAnswers(p => ({ ...p, [key]: val }));
   const toggle = (key, val) => setAnswers(p => ({ ...p, [key]: p[key].includes(val) ? p[key].filter(x => x !== val) : [...p[key], val] }));
@@ -163,8 +158,8 @@ export default function StyleQuiz() {
 
   const goNext = () => {
     if (!canNext()) return;
-    if (typeof phase === 'number' && phase < 5) { setPhase(phase + 1); return; }
-    if (phase === 5) { setPhase('analyzing'); }
+    if (typeof phase === 'number' && phase < 4) { setPhase(phase + 1); return; }
+    if (phase === 4) { setPhase('analyzing'); submitQuizAnswers(); }
   };
 
   // Skipping must still mark onboarding complete with the user's real
@@ -179,7 +174,7 @@ export default function StyleQuiz() {
         stylePreferences: [],
         occasionPreferences: ['daily'],
         colorPreferences: [],
-        budgetRange: { min: 500, max: 5000 },
+        comfortPriority: 3,
         culturalBackground: 'Nepali',
       });
       await refreshUser();
@@ -198,7 +193,7 @@ export default function StyleQuiz() {
   };
 
   const profile = STYLE_PROFILES[answers.fashionStyle] || STYLE_PROFILES.casual;
-  const progress = typeof phase === 'number' ? ((phase + 1) / 6) * 100 : phase === 'analyzing' || phase === 'result' ? 100 : 0;
+  const progress = typeof phase === 'number' ? ((phase + 1) / 5) * 100 : phase === 'analyzing' || phase === 'result' ? 100 : 0;
 
   return (
     <div className="sq-root">
@@ -221,10 +216,10 @@ export default function StyleQuiz() {
               <span>👗</span>
             </div>
             <h1 className="sq-intro-title">Discover Your<br /><em>Style DNA</em></h1>
-            <p className="sq-intro-sub">Answer 6 fun questions and unlock a personalized AI fashion profile curated just for you.</p>
+            <p className="sq-intro-sub">Answer 5 fun questions and unlock a personalized AI fashion profile curated just for you.</p>
             <div className="sq-intro-chips">
               <span>⚡ 2 minutes</span>
-              <span>🎯 6 questions</span>
+              <span>🎯 5 questions</span>
               <span>✨ Free forever</span>
             </div>
             <button className="sq-btn-primary" onClick={() => setPhase(0)}>
@@ -255,7 +250,7 @@ export default function StyleQuiz() {
 
           {/* Question heading */}
           <div className="sq-qhead">
-            <span className="sq-qnum">Question {phase + 1} of 6</span>
+            <span className="sq-qnum">Question {phase + 1} of 5</span>
             <h2 className="sq-qtitle">{QUESTIONS[phase].title}</h2>
             <p className="sq-qsub">{QUESTIONS[phase].sub}</p>
           </div>
@@ -323,24 +318,6 @@ export default function StyleQuiz() {
           )}
 
           {phase === 3 && (
-            <div className="sq-budget-grid">
-              {BUDGETS.map(b => (
-                <button key={b.id} type="button"
-                  className={`sq-budget-card ${answers.budget === b.id ? 'active' : ''}`}
-                  onClick={() => set('budget', b.id)}>
-                  <span className="sq-budget-icon">{b.icon}</span>
-                  <div className="sq-budget-body">
-                    <span className="sq-budget-label">{b.label}</span>
-                    <span className="sq-budget-range">{b.range}</span>
-                    <span className="sq-budget-desc">{b.desc}</span>
-                  </div>
-                  {answers.budget === b.id && <span className="sq-budget-check">✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {phase === 4 && (
             <div className="sq-comfort-wrap">
               <div className="sq-comfort-scale">
                 {COMFORT.map(c => (
@@ -364,7 +341,7 @@ export default function StyleQuiz() {
             </div>
           )}
 
-          {phase === 5 && (
+          {phase === 4 && (
             <div className="sq-insp-grid">
               {INSPIRATIONS.map(ins => (
                 <button key={ins.id} type="button"
@@ -383,7 +360,7 @@ export default function StyleQuiz() {
           {/* Next button */}
           <div className="sq-qfooter">
             <button className="sq-btn-primary" onClick={goNext} disabled={!canNext()}>
-              {phase === 5 ? 'Generate My Style Profile ✨' : 'Continue →'}
+              {phase === 4 ? 'Generate My Style Profile ✨' : 'Continue →'}
             </button>
           </div>
         </div>
@@ -454,7 +431,6 @@ export default function StyleQuiz() {
                 { label: 'Style', val: STYLE_CARDS.find(s => s.id === answers.fashionStyle)?.label || '—' },
                 { label: 'Occasion', val: OCCASIONS.find(o => o.id === answers.occasion)?.label || '—' },
                 { label: 'Vibe', val: INSPIRATIONS.find(i => i.id === answers.inspiration)?.label || '—' },
-                { label: 'Budget', val: BUDGETS.find(b => b.id === answers.budget)?.label || '—' },
               ].map(s => (
                 <div key={s.label} className="sq-result-stat">
                   <span>{s.val}</span>
@@ -482,7 +458,7 @@ export default function StyleQuiz() {
               {saving ? <span className="sq-spinner" /> : 'Explore My Outfits →'}
             </button>
             <button className="sq-btn-retake" onClick={() => {
-              setAnswers({ fashionStyle: null, favoriteColors: [], occasion: null, budget: null, comfortLevel: null, inspiration: null });
+              setAnswers({ fashionStyle: null, favoriteColors: [], occasion: null, comfortLevel: null, inspiration: null });
               setAnalyzeProgress(0); setMsgIdx(0); setPhase('intro');
             }}>
               Retake quiz

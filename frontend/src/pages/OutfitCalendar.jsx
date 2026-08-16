@@ -150,7 +150,7 @@ export default function OutfitCalendar() {
     }
     setSuggestions([]);
     setPanelOpen(true);
-  }, [entries]);
+  }, [entries, showToast]);
 
   const fetchSuggestions = async () => {
     if (!selectedDate) return;

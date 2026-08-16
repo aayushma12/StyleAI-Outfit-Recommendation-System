@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
 import { getMeterColor } from '../utils/confidenceScale';
 import useDebounce from '../hooks/useDebounce';

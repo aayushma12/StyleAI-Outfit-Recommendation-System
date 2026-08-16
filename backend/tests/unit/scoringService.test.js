@@ -4,7 +4,7 @@ const scoring = require('../../services/scoringService');
 
 const SCORE_KEYS = [
   'styleMatch', 'colorHarmony', 'colorPref', 'occasionFit', 'weatherFit',
-  'behaviorSignal', 'bodyTypeMatch', 'fabricMatch', 'trendScore',
+  'behaviorSignal', 'bodyTypeMatch', 'fabricMatch', 'trendScore', 'comfortMatch',
 ];
 
 const sampleOutfitItems = [
@@ -26,7 +26,7 @@ const sampleContext = { occasion: 'office', weather: { temp: 20 } };
 const sampleInsights = { hasHistory: false };
 
 describe('scoringService.computeSubScores', () => {
-  test('returns all 9 dimensions, each within [0, 1]', () => {
+  test('returns all 10 dimensions, each within [0, 1]', () => {
     const scores = scoring.computeSubScores(sampleOutfitItems, {}, sampleUser, sampleContext, sampleInsights, {});
     expect(Object.keys(scores).sort()).toEqual(SCORE_KEYS.sort());
     for (const key of SCORE_KEYS) {
@@ -42,7 +42,7 @@ describe('scoringService.computeSubScores', () => {
 });
 
 describe('scoringService.finalizeScore', () => {
-  const subScores = { styleMatch: 0.8, colorHarmony: 0.8, colorPref: 0.8, occasionFit: 0.8, weatherFit: 0.8, behaviorSignal: 0.8, bodyTypeMatch: 0.8, fabricMatch: 0.8, trendScore: 0.8 };
+  const subScores = { styleMatch: 0.8, colorHarmony: 0.8, colorPref: 0.8, occasionFit: 0.8, weatherFit: 0.8, behaviorSignal: 0.8, bodyTypeMatch: 0.8, fabricMatch: 0.8, trendScore: 0.8, comfortMatch: 0.8 };
 
   test('produces a confidence between 10 and 99 and a full breakdown', () => {
     const { confidence, breakdown } = scoring.finalizeScore(subScores, 'best_match');
@@ -144,8 +144,14 @@ describe('scoringService.CATEGORY_WEIGHTS', () => {
     }
   });
 
-  test('only the 3 wizard categories carry the 5 new wizard-only dimensions', () => {
-    const wizardOnlyKeys = ['dresscodeFit', 'indoorOutdoorFit', 'dayNightFit', 'vibeMatch', 'budgetFit'];
+  test('every category carries comfortMatch (a core dimension, not wizard-only)', () => {
+    for (const [, weights] of Object.entries(scoring.CATEGORY_WEIGHTS)) {
+      expect(weights.comfortMatch).toBeGreaterThan(0);
+    }
+  });
+
+  test('only the 3 wizard categories carry the 4 new wizard-only dimensions', () => {
+    const wizardOnlyKeys = ['dresscodeFit', 'indoorOutdoorFit', 'dayNightFit', 'vibeMatch'];
     for (const [category, weights] of Object.entries(scoring.CATEGORY_WEIGHTS)) {
       const hasWizardKeys = wizardOnlyKeys.some(k => k in weights);
       expect(hasWizardKeys).toBe(category.startsWith('wizard_option_'));
@@ -158,7 +164,7 @@ describe('scoringService.computeSubScores — wizard-only dimensions', () => {
     { name: 'Blazer', category: 'jackets', color: 'black', occasion: 'office', formalityLevel: 4, colorHex: ['#111111'] },
     { name: 'Trousers', category: 'bottoms', color: 'black', occasion: 'office', formalityLevel: 4, colorHex: ['#111111'] },
   ];
-  test('absent when no wizard fields are supplied — non-wizard sessions get exactly the original 9 keys', () => {
+  test('absent when no wizard fields are supplied — non-wizard sessions get exactly the 10 core keys', () => {
     const scores = scoring.computeSubScores(sampleOutfitItems, {}, sampleUser, sampleContext, sampleInsights, {});
     expect(Object.keys(scores).sort()).toEqual(SCORE_KEYS.sort());
   });
@@ -198,14 +204,41 @@ describe('scoringService.computeSubScores — wizard-only dimensions', () => {
     expect(scores.dayNightFit).toBeUndefined();
     expect(scores.indoorOutdoorFit).toBeUndefined();
   });
+});
 
-  test('budgetFit rewards owned-heavy outfits more for a "budget" tier than a "luxury" tier', () => {
-    const mostlySuggestedSlots = {
-      top: { name: 'Owned Top', item: 'x' }, bottom: { suggestion: 'suggested bottoms' },
-      footwear: { suggestion: 'suggested shoes' }, jewelry: { suggestion: 'suggested jewelry' },
-    };
-    const budgetScores  = scoring.computeSubScores(sampleOutfitItems, mostlySuggestedSlots, sampleUser, { ...sampleContext, budget: 'budget' },  sampleInsights, {});
-    const luxuryScores  = scoring.computeSubScores(sampleOutfitItems, mostlySuggestedSlots, sampleUser, { ...sampleContext, budget: 'luxury' }, sampleInsights, {});
-    expect(budgetScores.budgetFit).toBeLessThan(luxuryScores.budgetFit);
+describe('scoringService.computeSubScores — comfortMatch (core dimension)', () => {
+  const formalOutfit = [
+    { name: 'Blazer', category: 'jackets', color: 'black', occasion: 'office', formalityLevel: 4, colorHex: ['#111111'] },
+    { name: 'Trousers', category: 'bottoms', color: 'black', occasion: 'office', formalityLevel: 4, colorHex: ['#111111'] },
+  ];
+  const casualOutfit = [
+    { name: 'Tee', category: 'tops', color: 'white', occasion: 'daily', formalityLevel: 1, colorHex: ['#ffffff'] },
+    { name: 'Jeans', category: 'bottoms', color: 'blue', occasion: 'daily', formalityLevel: 1, colorHex: ['#3B82F6'] },
+  ];
+
+  test('rewards a formal outfit for a high comfortPriority and penalizes it for a low one', () => {
+    const dressedUpUser = { ...sampleUser, comfortPriority: 5 };
+    const laidBackUser  = { ...sampleUser, comfortPriority: 1 };
+    const forDressedUp = scoring.computeSubScores(formalOutfit, {}, dressedUpUser, sampleContext, sampleInsights, {});
+    const forLaidBack   = scoring.computeSubScores(formalOutfit, {}, laidBackUser, sampleContext, sampleInsights, {});
+    expect(forDressedUp.comfortMatch).toBeGreaterThan(forLaidBack.comfortMatch);
+  });
+
+  test('rewards a casual outfit for a low comfortPriority and penalizes it for a high one', () => {
+    const dressedUpUser = { ...sampleUser, comfortPriority: 5 };
+    const laidBackUser  = { ...sampleUser, comfortPriority: 1 };
+    const forDressedUp = scoring.computeSubScores(casualOutfit, {}, dressedUpUser, sampleContext, sampleInsights, {});
+    const forLaidBack   = scoring.computeSubScores(casualOutfit, {}, laidBackUser, sampleContext, sampleInsights, {});
+    expect(forLaidBack.comfortMatch).toBeGreaterThan(forDressedUp.comfortMatch);
+  });
+
+  test('is neutral (0.5) when comfortPriority is absent from the profile', () => {
+    const scores = scoring.computeSubScores(formalOutfit, {}, sampleUser, sampleContext, sampleInsights, {});
+    expect(scores.comfortMatch).toBe(0.5);
+  });
+
+  test('is neutral (0.5) when no outfit item has a formalityLevel set', () => {
+    const scores = scoring.computeSubScores(sampleOutfitItems, {}, { ...sampleUser, comfortPriority: 5 }, sampleContext, sampleInsights, {});
+    expect(scores.comfortMatch).toBe(0.5);
   });
 });

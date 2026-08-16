@@ -9,7 +9,7 @@ const QUICK_FILTERS = ['All','Traditional','College','Office','Party','Wedding',
 const OUTFITS = [
   { img:'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80', badge:'Top Pick',    name:'Festive Saree Look',       tags:['Festival','Traditional'], pct:94, filter:'Traditional' },
   { img:'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=400&q=80', badge:'Trending',    name:'Fusion Kurta Set',          tags:['College','Casual'],       pct:88, filter:'College'     },
-  { img:'https://images.unsplash.com/photo-1594938298603-c8148c4b4d49?w=400&q=80', badge:'Office Pick', name:'Power Blazer Look',         tags:['Office','Formal'],        pct:85, filter:'Office'      },
+  { img:'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80', badge:'Office Pick', name:'Power Blazer Look',         tags:['Office','Formal'],        pct:85, filter:'Office'      },
   { img:'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&q=80', badge:'Party',       name:'Evening Party Dress',       tags:['Party','Western'],        pct:91, filter:'Party'       },
   { img:'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=400&q=80', badge:'Bridal',      name:'Bridal Lehenga Style',      tags:['Wedding','Traditional'],  pct:97, filter:'Wedding'     },
   { img:'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&q=80', badge:'Casual',      name:'Street Style Look',         tags:['Casual','Summer'],        pct:82, filter:'Casual'      },
@@ -26,7 +26,7 @@ const TRENDING = [
   { rank:2, img:'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=300&q=80', name:'College Casual Fusion',  badge:'📈 Rising'    },
   { rank:3, img:'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=300&q=80', name:'Wedding Season Style',   badge:'✨ AI Curated' },
   { rank:4, img:'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300&q=80', name:'Street Style Kathmandu', badge:'🌟 New'        },
-  { rank:5, img:'https://images.unsplash.com/photo-1594938298603-c8148c4b4d49?w=300&q=80', name:'Power Office Look',      badge:'💼 Office'     },
+  { rank:5, img:'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300&q=80', name:'Power Office Look',      badge:'💼 Office'     },
   { rank:6, img:'https://images.unsplash.com/photo-1485968579580-b6d095142e6e?w=300&q=80', name:'Monsoon Fresh Look',     badge:'🌧️ Season'   },
 ];
 
@@ -62,7 +62,7 @@ const FESTIVALS = [
 
 const STEPS = [
   { n:1, emoji:'👤', title:'Create Your Profile',     desc:'Sign up and share your age, body type, skin tone, and cultural background to personalise your experience.' },
-  { n:2, emoji:'🎨', title:'Complete Style Quiz',      desc:'Tell us your fashion personality, favourite occasions, preferred colours, and comfortable budget range.' },
+  { n:2, emoji:'🎨', title:'Complete Style Quiz',      desc:'Tell us your fashion personality, favourite occasions, preferred colours, and comfort level.' },
   { n:3, emoji:'🤖', title:'AI Analyzes Your DNA',     desc:'Our ML model builds your unique fashion DNA and computes cosine similarity scores against every outfit.' },
   { n:4, emoji:'✨', title:'Get Personalized Outfits', desc:'Receive outfit suggestions tailored to your profile, current Kathmandu season, weather, and occasion.' },
   { n:5, emoji:'🔄', title:'AI Learns & Improves',     desc:'Rate outfits and our AI continuously refines its model — getting smarter with every interaction.' },
@@ -290,7 +290,7 @@ export default function Landing() {
           <button className="l-logo-btn" onClick={() => scrollTo('home')} aria-label="StyleAI home">
             <span className="logo-icon" aria-hidden="true">✦</span>StyleAI
           </button>
-          <ul className="l-navlinks" role="list">
+          <ul className="l-navlinks">
             {navLinks.map(([id, label]) => (
               <li key={id}><button onClick={() => scrollTo(id)}>{label}</button></li>
             ))}
@@ -569,7 +569,6 @@ export default function Landing() {
                   { icon:'🎯', label:'Occasion',     val:'Dashain Festival'      },
                   { icon:'🌤️', label:'Weather',      val:'22°C, Partly Cloudy'   },
                   { icon:'🎨', label:'Color Profile', val:'Warm reds & gold tones'},
-                  { icon:'💰', label:'Budget Match',  val:'Within NPR 3,000–8,000'},
                   { icon:'👤', label:'Body Type',     val:'Hourglass — A-line fit' },
                 ].map(f => (
                   <div key={f.label} className="aif-row">

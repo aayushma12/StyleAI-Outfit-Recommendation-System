@@ -28,6 +28,12 @@ ml-service/model_backups/
 ml-service/acceptance_model.pkl
 ml-service/model_meta.json
 
+# Polyvore compatibility dataset + model (regenerable via `npm run fetch:polyvore`
+# then `npm run train:compat` — see ml-service/POLYVORE_COMPAT.md)
+ml-service/data/polyvore/
+ml-service/compat_model.pkl
+ml-service/compat_model_meta.json
+
 # OS-specific
 .DS_Store
 Thumbs.db

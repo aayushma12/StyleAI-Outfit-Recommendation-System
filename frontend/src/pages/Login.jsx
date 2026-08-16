@@ -140,19 +140,6 @@ export default function Login() {
             </div>
           )}
 
-          {error && errorCode === 'EMAIL_NOT_VERIFIED' && (
-            <div className="lg-error lg-error--info">
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{flexShrink:0,marginTop:1}}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <span>
-                <strong>Email not verified.</strong><br />
-                Check your inbox for the verification link, or{' '}
-                <Link to="/verify-email/resend" className="lg-error-link">resend the verification email</Link>.
-              </span>
-            </div>
-          )}
-
           {error && errorCode === 'ACCOUNT_SUSPENDED' && (
             <div className="lg-error lg-error--warn">
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{flexShrink:0,marginTop:1}}>
@@ -165,7 +152,7 @@ export default function Login() {
             </div>
           )}
 
-          {error && !['ACCOUNT_LOCKED', 'EMAIL_NOT_VERIFIED', 'ACCOUNT_SUSPENDED'].includes(errorCode) && (
+          {error && !['ACCOUNT_LOCKED', 'ACCOUNT_SUSPENDED'].includes(errorCode) && (
             <div className="lg-error">
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{flexShrink:0,marginTop:1}}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />

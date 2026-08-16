@@ -65,9 +65,6 @@ const userSchema = new mongoose.Schema({
   isSyntheticPersona:        { type: Boolean, default: false, index: true },
   syntheticPersonaArchetype: { type: String,  default: '' },
   isBlocked: { type: Boolean, default: false },
-  emailVerified: { type: Boolean, default: false },
-  verificationToken:   { type: String, select: false },
-  verificationExpiry:  { type: Date,   select: false },
   lastLogin: { type: Date },
   // Failed login tracking for account lockout
   loginAttempts: { type: Number, default: 0 },
@@ -79,8 +76,14 @@ const userSchema = new mongoose.Schema({
   phoneNumber: { type: String, trim: true, match: [/^\+?[\d\s\-().]{7,20}$/, 'Invalid phone number'] },
   consentGiven: { type: Boolean, default: false },
   consentDate: { type: Date },
-  resetPasswordToken:   { type: String, select: false },
-  resetPasswordExpires: { type: Date,   select: false },
+  // OTP-based password reset (replaces the earlier link-token flow — real
+  // email delivery of a 6-digit code the user types back in, verified and
+  // consumed in one step alongside the new password). resetOtpAttempts caps
+  // brute-force guesses against the 6-digit (1e6) keyspace within the OTP's
+  // validity window — exceeding it invalidates the code, forcing a fresh one.
+  resetOtp:          { type: String, select: false },
+  resetOtpExpires:   { type: Date,   select: false },
+  resetOtpAttempts:  { type: Number, select: false, default: 0 },
   notificationsEnabled: { type: Boolean, default: true },
   themePreference: { type: String, enum: ['light', 'dark'], default: 'light' },
   location: { type: String, trim: true, default: 'Kathmandu' },

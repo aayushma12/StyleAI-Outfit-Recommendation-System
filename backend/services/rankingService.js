@@ -17,6 +17,60 @@ function resolveOutfitItems(slots, itemsById) {
     .filter(Boolean);
 }
 
+// ── Polyvore compat-model feature extraction ────────────────────────────────
+// Mirrors ml-service/polyvore_compat_trainer.py's build_outfit_features()
+// exactly (same field names/order) — see that file's ALL_FEATURES. Bucket
+// names match WardrobeItem.js's `category` enum directly (no subgroup
+// translation needed on this side, unlike the Polyvore-category mapping the
+// Python trainer needs).
+const COMPAT_BUCKETS = ['tops', 'bottoms', 'dresses', 'footwear', 'accessories'];
+
+function circularHueDistance(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+
+function buildCompatFeatures(outfitItems) {
+  const bucketCounts = { tops: 0, bottoms: 0, dresses: 0, footwear: 0, accessories: 0 };
+  outfitItems.forEach(it => {
+    if (bucketCounts[it.category] !== undefined) bucketCounts[it.category]++;
+  });
+  const bucketsPresent = COMPAT_BUCKETS.filter(b => bucketCounts[b] > 0);
+
+  const allColors        = outfitItems.flatMap(it => scoring.extractColors(it).map(c => c.toLowerCase()));
+  const neutralColors     = allColors.filter(c => rules.NEUTRAL_COLORS.has(c));
+  const nonNeutralColors  = allColors.filter(c => rules.COLOR_HUE[c] !== undefined);
+  const hues              = nonNeutralColors.map(c => rules.COLOR_HUE[c]);
+
+  let avgHueDist = 0, minHueDist = 0, hasMultipleHues = 0;
+  if (hues.length >= 2) {
+    const pairDists = [];
+    for (let i = 0; i < hues.length; i++) {
+      for (let j = i + 1; j < hues.length; j++) pairDists.push(circularHueDistance(hues[i], hues[j]));
+    }
+    avgHueDist = pairDists.reduce((a, b) => a + b, 0) / pairDists.length;
+    minHueDist = Math.min(...pairDists);
+    hasMultipleHues = 1;
+  }
+
+  return {
+    numItems:              outfitItems.length,
+    numTops:                bucketCounts.tops,
+    numBottoms:              bucketCounts.bottoms,
+    numDresses:              bucketCounts.dresses,
+    numFootwear:             bucketCounts.footwear,
+    numAccessories:          bucketCounts.accessories,
+    categoryDiversity:       bucketsPresent.length,
+    hasDressAndBottom:       (bucketCounts.dresses > 0 && bucketCounts.bottoms > 0) ? 1 : 0,
+    numColorsDetected:       neutralColors.length + nonNeutralColors.length,
+    numNeutralColors:        neutralColors.length,
+    numNonNeutralColors:     nonNeutralColors.length,
+    hasMultipleHues,
+    avgPairwiseHueDistance:  avgHueDist,
+    minPairwiseHueDistance:  minHueDist,
+  };
+}
+
 /**
  * @param {Array}  candidates - output of candidateGenerationService.generateCandidates
  * @param {object} user
@@ -27,7 +81,7 @@ function resolveOutfitItems(slots, itemsById) {
  *   Absent (default {}) for every standard dashboard session, so the 5 new
  *   scoring dimensions are simply never computed there — zero behavior change
  *   to the existing 5 non-wizard categories.
- * @returns {Promise<object>} - { [categoryKey]: [{candidate, outfitItems, subScores, mlAcceptanceProbability, confidence, breakdown}, ...] } sorted descending by confidence
+ * @returns {Promise<object>} - { [categoryKey]: [{candidate, outfitItems, subScores, mlAcceptanceProbability, datasetCompatProbability, confidence, breakdown}, ...] } sorted descending by confidence
  */
 exports.rankForCategories = async function rankForCategories(candidates, user, context, categories, wizardParams = {}) {
   const itemsById = new Map((context.wardrobeItems || []).map(it => [String(it._id), it]));
@@ -72,9 +126,24 @@ exports.rankForCategories = async function rankForCategories(candidates, user, c
     // Never let an ML failure block ranking — stays "unavailable".
   }
 
+  // 2b. One batched call to the independent Polyvore-trained compat model —
+  // separate circuit breaker/endpoint, so an outage here never affects the
+  // acceptance-model call above. See scoringService.finalizeScore for why
+  // this is attached to the breakdown but NOT blended into `confidence` yet.
+  const compatFeatureBatch = base.map(b => buildCompatFeatures(b.outfitItems));
+  let compatResult = { available: false, predictions: [] };
+  try {
+    compatResult = await mlBridge.predictCompat(compatFeatureBatch);
+  } catch {
+    // Same never-block-ranking discipline as the acceptance-model call.
+  }
+
   base.forEach((b, i) => {
     b.mlAcceptanceProbability = (mlResult.available && mlResult.predictions[i])
       ? mlResult.predictions[i].acceptanceProbability
+      : null;
+    b.datasetCompatProbability = (compatResult.available && compatResult.predictions[i])
+      ? compatResult.predictions[i].datasetCompatProbability
       : null;
   });
 
@@ -89,6 +158,7 @@ exports.rankForCategories = async function rankForCategories(candidates, user, c
           outfitItems: b.outfitItems,
           subScores: b.subScores,
           mlAcceptanceProbability: b.mlAcceptanceProbability,
+          datasetCompatProbability: b.datasetCompatProbability,
           confidence,
           breakdown,
           ruleScore,

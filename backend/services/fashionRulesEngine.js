@@ -283,6 +283,11 @@ exports.OCCASIONS         = OCCASIONS;
 exports.OCCASION_META     = OCCASION_META;
 exports.WEATHER_TIERS     = WEATHER_TIERS;
 exports.NEUTRAL_COLORS    = NEUTRAL_COLORS;
+// Exported so other modules needing raw hue values (e.g. datasetCompatService's
+// pairwise-hue-distance features) reuse this exact table rather than
+// re-declaring it — see ml-service/polyvore_compat_trainer.py's COLOR_HUE for
+// the Python-side port of this same table.
+exports.COLOR_HUE         = COLOR_HUE;
 exports.SKIN_TONE_PALETTE = SKIN_TONE_PALETTE;
 
 // ── Body-type compatibility ────────────────────────────────────────────────────

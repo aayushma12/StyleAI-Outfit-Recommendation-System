@@ -25,6 +25,7 @@ const scoreBreakdownSchema = new mongoose.Schema({
   bodyTypeMatch:   { type: Number, default: 70 },
   fabricMatch:     { type: Number, default: 70 },
   trendScore:      { type: Number, default: 55 },
+  comfortMatch:    { type: Number, default: 70 },
   // Wizard-only dimensions — null for every standard (non-wizard) session,
   // populated only when the recommendation wizard supplied real signal for
   // the corresponding field (see scoringService.js's computeSubScores).
@@ -104,6 +105,13 @@ const rankedRecommendationSchema = new mongoose.Schema({
   // params, weather, candidate count, ML probability, final score, feedback
   // reason were all already persisted).
   ruleScore: { type: Number, default: null, min: 0, max: 1 },
+
+  // Independent second ML signal from the Polyvore-trained real-data
+  // compatibility model (see ml-service/POLYVORE_COMPAT.md). NOT blended into
+  // `confidence` (Phase 1 — visible-only, see scoringService.finalizeScore's
+  // doc comment). Persisted so a future backtest against real `status`/
+  // `userRating` outcomes can decide whether/how much to blend it in.
+  datasetCompatProbability: { type: Number, default: null, min: 0, max: 1 },
 
   // Bounded runner-up pool (top 2, computed once at generation time from
   // candidates rankingService already scored — never regenerated) used for

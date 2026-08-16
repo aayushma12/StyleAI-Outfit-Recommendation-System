@@ -8,13 +8,13 @@
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-only-jwt-secret-not-for-production';
 
 // The real backend/.env may have live SMTP credentials configured (Mailtrap).
-// Force them off during tests so authController's `smtpConfigured` check is
-// false — otherwise registration tries to send a real email over the network
-// on every test run, which is slow, flaky, and burns real send quota. This
-// must run before app.js's `require('dotenv').config()` executes (Jest runs
-// setupFilesAfterEnv before the test file's own top-level requires), and
-// dotenv only fills in variables that are still `undefined`, so setting these
-// to '' here beats dotenv to it.
+// Force them off during tests as a blanket guard against any code path
+// (currently just the forgot-password flow, which is always mocked directly
+// in auth.test.js) attempting a real network send during a test run — slow,
+// flaky, and burns real send quota. This must run before app.js's
+// `require('dotenv').config()` executes (Jest runs setupFilesAfterEnv before
+// the test file's own top-level requires), and dotenv only fills in variables
+// that are still `undefined`, so setting these to '' here beats dotenv to it.
 process.env.SMTP_HOST = '';
 process.env.SMTP_USER = '';
 process.env.SMTP_PASS = '';

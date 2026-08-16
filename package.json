@@ -11,6 +11,8 @@
     "dev:frontend": "npm --prefix frontend start",
     "dev:ml": "python ml-service/app.py",
     "train:ml": "python ml-service/acceptance_trainer.py",
+    "fetch:polyvore": "python ml-service/scripts/download_polyvore.py",
+    "train:compat": "python ml-service/polyvore_compat_trainer.py",
     "seed:kathmandu": "cd backend && node scripts/seedKathmanduTrends.js",
     "seed:catalog": "cd backend && node scripts/seedOutfitCatalog.js",
     "seed:persona-data": "cd backend && node scripts/seedPersonaSyntheticBehavior.js",

@@ -50,12 +50,12 @@ const send = async ({ to, subject, html, text }) => {
   return info;
 };
 
-const buildResetPasswordHtml = (name, resetUrl) => `<!DOCTYPE html>
+const buildResetOtpHtml = (name, otp) => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Reset your StyleAI password</title>
+  <title>Your StyleAI password reset code</title>
 </head>
 <body style="margin:0;padding:0;background:#F0FDFA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
 
@@ -93,38 +93,27 @@ const buildResetPasswordHtml = (name, resetUrl) => `<!DOCTYPE html>
           <td style="background:#fff;padding:40px 44px 36px;">
 
             <h2 style="margin:0 0 6px;font-size:22px;font-weight:800;
-                       color:#042F2E;letter-spacing:-.3px;">Password Reset Request</h2>
+                       color:#042F2E;letter-spacing:-.3px;">Password Reset Code</h2>
 
             <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.7;">
               Hi <strong style="color:#042F2E;">${name}</strong>,<br><br>
               We received a request to reset the password for your StyleAI account.
-              Click the button below to choose a new password.
+              Enter the code below to continue.
             </p>
 
             <table role="presentation" cellpadding="0" cellspacing="0"
                    width="100%" style="margin:0 0 28px;">
               <tr><td align="center">
-                <a href="${resetUrl}" target="_blank"
-                   style="display:inline-block;
+                <div style="display:inline-block;
                           background:linear-gradient(135deg,#0D9488 0%,#0891B2 100%);
-                          color:#fff;font-size:16px;font-weight:700;
-                          text-decoration:none;padding:15px 40px;
-                          border-radius:12px;letter-spacing:.01em;
+                          color:#fff;font-size:36px;font-weight:800;
+                          letter-spacing:10px;padding:18px 32px;
+                          border-radius:12px;
                           box-shadow:0 4px 16px rgba(13,148,136,.35);">
-                  Reset My Password &rarr;
-                </a>
+                  ${otp}
+                </div>
               </td></tr>
             </table>
-
-            <p style="margin:0 0 8px;font-size:13px;color:#6B7280;">
-              If the button doesn't work, copy and paste this link into your browser:
-            </p>
-            <p style="margin:0 0 28px;padding:12px 16px;
-                      background:#F0FDFA;border:1px solid #CCFBF1;
-                      border-radius:8px;word-break:break-all;
-                      font-size:12.5px;color:#0F766E;line-height:1.5;">
-              ${resetUrl}
-            </p>
 
             <table role="presentation" cellpadding="0" cellspacing="0"
                    width="100%" style="margin-bottom:28px;">
@@ -136,7 +125,7 @@ const buildResetPasswordHtml = (name, resetUrl) => `<!DOCTYPE html>
                       <td style="vertical-align:top;padding-right:10px;
                                  font-size:17px;line-height:1.2;">&#9201;</td>
                       <td style="font-size:13px;color:#92400E;line-height:1.6;">
-                        <strong>This link expires in 15 minutes.</strong><br>
+                        <strong>This code expires in 10 minutes.</strong><br>
                         After it expires, you can request a new one from the
                         <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/forgot-password"
                            style="color:#0D9488;text-decoration:underline;">login page</a>.
@@ -181,15 +170,14 @@ const buildResetPasswordHtml = (name, resetUrl) => `<!DOCTYPE html>
 </body>
 </html>`;
 
-const buildResetPasswordText = (name, resetUrl) => `
+const buildResetOtpText = (name, otp) => `
 Hi ${name},
 
 We received a request to reset the password for your StyleAI account.
 
-To reset your password, visit the link below:
-${resetUrl}
+Your password reset code is: ${otp}
 
-IMPORTANT: This link expires in 15 minutes.
+IMPORTANT: This code expires in 10 minutes.
 
 If you didn't request a password reset, you can safely ignore this email.
 Your password will remain unchanged.
@@ -199,154 +187,11 @@ StyleAI · AI-Powered Fashion · Kathmandu
 This is an automated message — please do not reply.
 `.trim();
 
-exports.sendPasswordResetEmail = async ({ email, name, resetUrl }) => {
+exports.sendPasswordResetOtpEmail = async ({ email, name, otp }) => {
   await send({
     to:      email,
-    subject: 'Reset your StyleAI password',
-    html:    buildResetPasswordHtml(name, resetUrl),
-    text:    buildResetPasswordText(name, resetUrl),
-  });
-};
-
-// ── Email verification ────────────────────────────────────────────────────────
-
-const buildVerificationHtml = (name, verifyUrl) => `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Verify your StyleAI email</title>
-</head>
-<body style="margin:0;padding:0;background:#F5F3FF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-         style="background:#F5F3FF;padding:40px 16px;">
-    <tr><td align="center">
-
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-             style="max-width:580px;border-radius:20px;overflow:hidden;
-                    box-shadow:0 4px 24px rgba(124,58,237,.12);">
-
-        <!-- Header -->
-        <tr>
-          <td style="background:linear-gradient(135deg,#4C1D95 0%,#7C3AED 50%,#0D9488 100%);
-                     padding:36px 40px;text-align:center;">
-            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 14px;">
-              <tr>
-                <td style="width:52px;height:52px;background:rgba(255,255,255,.15);
-                           border:1.5px solid rgba(255,255,255,.30);border-radius:14px;
-                           text-align:center;vertical-align:middle;font-size:24px;
-                           font-weight:900;color:#fff;line-height:52px;">&#10022;</td>
-              </tr>
-            </table>
-            <h1 style="margin:0 0 5px;font-size:28px;font-weight:800;color:#fff;letter-spacing:-.5px;">StyleAI</h1>
-            <p style="margin:0;font-size:13px;color:rgba(255,255,255,.65);">
-              AI-Powered Fashion &middot; Kathmandu
-            </p>
-          </td>
-        </tr>
-
-        <!-- Body -->
-        <tr>
-          <td style="background:#fff;padding:40px 44px 36px;">
-            <h2 style="margin:0 0 6px;font-size:22px;font-weight:800;color:#4C1D95;letter-spacing:-.3px;">
-              Welcome to StyleAI! ✨
-            </h2>
-            <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.7;">
-              Hi <strong style="color:#4C1D95;">${name}</strong>,<br><br>
-              Thank you for joining StyleAI — your personal AI-powered style companion.
-              Please verify your email address to activate your account and start discovering
-              outfits curated just for you.
-            </p>
-
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 28px;">
-              <tr><td align="center">
-                <a href="${verifyUrl}" target="_blank"
-                   style="display:inline-block;
-                          background:linear-gradient(135deg,#7C3AED 0%,#0D9488 100%);
-                          color:#fff;font-size:16px;font-weight:700;
-                          text-decoration:none;padding:15px 40px;
-                          border-radius:12px;letter-spacing:.01em;
-                          box-shadow:0 4px 16px rgba(124,58,237,.35);">
-                  Verify My Email &rarr;
-                </a>
-              </td></tr>
-            </table>
-
-            <p style="margin:0 0 8px;font-size:13px;color:#6B7280;">
-              If the button doesn't work, copy and paste this link into your browser:
-            </p>
-            <p style="margin:0 0 28px;padding:12px 16px;background:#F5F3FF;
-                      border:1px solid #DDD6FE;border-radius:8px;word-break:break-all;
-                      font-size:12.5px;color:#7C3AED;line-height:1.5;">${verifyUrl}</p>
-
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:28px;">
-              <tr>
-                <td style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:14px 18px;">
-                  <table role="presentation" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td style="vertical-align:top;padding-right:10px;font-size:17px;line-height:1.2;">&#9201;</td>
-                      <td style="font-size:13px;color:#92400E;line-height:1.6;">
-                        <strong>This link expires in 24 hours.</strong><br>
-                        After it expires, you can request a new one from the
-                        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email/resend"
-                           style="color:#7C3AED;text-decoration:underline;">resend page</a>.
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:20px;">
-              <tr><td style="border-top:1px solid #F3F4F6;font-size:0;">&nbsp;</td></tr>
-            </table>
-
-            <p style="margin:0;font-size:13px;color:#9CA3AF;line-height:1.65;">
-              <strong style="color:#6B7280;">Didn't create a StyleAI account?</strong>
-              You can safely ignore this email — no account will be activated without verification.
-            </p>
-          </td>
-        </tr>
-
-        <!-- Footer -->
-        <tr>
-          <td style="background:#F5F3FF;border-top:1px solid #DDD6FE;padding:20px 44px;text-align:center;">
-            <p style="margin:0 0 4px;font-size:12px;color:#9CA3AF;">
-              &copy; 2026 StyleAI &middot; AI-Powered Fashion for Young Women in Kathmandu
-            </p>
-            <p style="margin:0;font-size:11.5px;color:#B0BEC5;">
-              This is an automated message &mdash; please do not reply to this email.
-            </p>
-          </td>
-        </tr>
-
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-
-const buildVerificationText = (name, verifyUrl) => `
-Welcome to StyleAI, ${name}!
-
-Please verify your email address by visiting:
-${verifyUrl}
-
-IMPORTANT: This link expires in 24 hours.
-
-If you didn't create a StyleAI account, you can safely ignore this email.
-
----
-StyleAI · AI-Powered Fashion · Kathmandu
-This is an automated message — please do not reply.
-`.trim();
-
-exports.sendVerificationEmail = async ({ email, name, verifyUrl }) => {
-  await send({
-    to:      email,
-    subject: 'Verify your StyleAI email address',
-    html:    buildVerificationHtml(name, verifyUrl),
-    text:    buildVerificationText(name, verifyUrl),
+    subject: `${otp} is your StyleAI password reset code`,
+    html:    buildResetOtpHtml(name, otp),
+    text:    buildResetOtpText(name, otp),
   });
 };

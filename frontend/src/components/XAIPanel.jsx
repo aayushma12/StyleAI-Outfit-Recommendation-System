@@ -9,6 +9,7 @@ import './XAIPanel.css';
 const FALLBACK_WEIGHTS = {
   styleMatch: 0.15, colorHarmony: 0.13, colorPref: 0.13, occasionFit: 0.14,
   weatherFit: 0.14, behaviorSignal: 0.10, bodyTypeMatch: 0.08, fabricMatch: 0.08, trendScore: 0.05,
+  comfortMatch: 0.04,
 };
 
 const SCORE_TO_WEIGHT_KEY = {
@@ -21,6 +22,7 @@ const SCORE_TO_WEIGHT_KEY = {
   bodyTypeMatch:   'bodyTypeMatch',
   fabricMatch:     'fabricMatch',
   trendScore:      'trendScore',
+  comfortMatch:    'comfortMatch',
 };
 
 const DIMENSION_LABELS = {
@@ -33,11 +35,12 @@ const DIMENSION_LABELS = {
   bodyTypeMatch:   'Body Type',
   fabricMatch:     'Fabric Match',
   trendScore:      'Trend Score',
+  comfortMatch:    'Comfort Match',
 };
 
 const DIMENSION_COLORS = [
   '#0D9488', '#D97706', '#0891B2', '#7C3AED',
-  '#059669', '#EA580C', '#0284C7', '#9333EA', '#E11D48',
+  '#059669', '#EA580C', '#0284C7', '#9333EA', '#E11D48', '#4338CA',
 ];
 
 const RADAR_DIMS = [
@@ -50,6 +53,7 @@ const RADAR_DIMS = [
   { key: 'bodyTypeMatch',   label: 'Body Type'     },
   { key: 'fabricMatch',     label: 'Fabric Match'  },
   { key: 'trendScore',      label: 'Trend Score'   },
+  { key: 'comfortMatch',    label: 'Comfort Match' },
 ];
 
 function computeContributions(scores, category, allWeights) {
@@ -206,6 +210,14 @@ export function XAIPanel({ rec, weights }) {
                 </span>
               </div>
             )}
+            {typeof rec.datasetCompatProbability === 'number' && (
+              <div className="xai-metric">
+                <span className="xai-metric-label">Real-Data Compatibility Check</span>
+                <span className="xai-metric-badge" style={{ background: '#7C3AED18', color: '#7C3AED' }}>
+                  {Math.round(rec.datasetCompatProbability * 100)}% match vs. real human-curated outfits
+                </span>
+              </div>
+            )}
           </div>
 
           <p className="xai-note" style={{ marginTop: 0 }}>
@@ -213,6 +225,14 @@ export function XAIPanel({ rec, weights }) {
               ? 'Explanation text was AI-polished for tone — every number above comes directly from the scoring engine, not the AI.'
               : 'Explanation text is generated directly from the scoring engine (template mode) — no AI language model was used for this session\'s wording.'}
           </p>
+
+          {typeof rec.datasetCompatProbability === 'number' && (
+            <p className="xai-note">
+              The Real-Data Compatibility Check is an independent second signal from a model trained on
+              the public Polyvore Outfits dataset of real, human-curated outfits — it is shown for
+              validation only and is not blended into the confidence score above.
+            </p>
+          )}
 
           <div className="xai-radar-wrap">
             <div className="xai-radar-title">9-Dimension Score Radar</div>

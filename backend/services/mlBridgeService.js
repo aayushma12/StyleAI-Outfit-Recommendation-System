@@ -15,19 +15,28 @@ const MAX_FAILS  = 5;
 const OPEN_WAIT  = 60 * 1000; // 60s
 
 // ── Circuit breaker state ─────────────────────────────────────────────────────
-const CB = {
-  state:       'CLOSED', // CLOSED | OPEN | HALF_OPEN
-  failures:    0,
-  successes:   0,
-  openedAt:    null,
-  lastCheckAt: null,
-};
+// Two independent breaker instances — an outage of just the compat model's
+// endpoint must never trip the breaker for the already-working acceptance-
+// model calls, and vice versa. Sharing one CB object across both would
+// couple two unrelated failure domains.
+function makeBreaker() {
+  return {
+    state:       'CLOSED', // CLOSED | OPEN | HALF_OPEN
+    failures:    0,
+    successes:   0,
+    openedAt:    null,
+    lastCheckAt: null,
+  };
+}
 
-function cbAllow() {
-  if (CB.state === 'CLOSED') return true;
-  if (CB.state === 'OPEN') {
-    if (Date.now() - CB.openedAt > OPEN_WAIT) {
-      CB.state = 'HALF_OPEN';
+const CB         = makeBreaker();
+const CB_COMPAT   = makeBreaker();
+
+function cbAllow(cb) {
+  if (cb.state === 'CLOSED') return true;
+  if (cb.state === 'OPEN') {
+    if (Date.now() - cb.openedAt > OPEN_WAIT) {
+      cb.state = 'HALF_OPEN';
       return true;
     }
     return false;
@@ -36,21 +45,21 @@ function cbAllow() {
   return true;
 }
 
-function cbSuccess() {
-  CB.successes++;
-  CB.lastCheckAt = new Date();
-  if (CB.state === 'HALF_OPEN') {
-    CB.state    = 'CLOSED';
-    CB.failures = 0;
+function cbSuccess(cb) {
+  cb.successes++;
+  cb.lastCheckAt = new Date();
+  if (cb.state === 'HALF_OPEN') {
+    cb.state    = 'CLOSED';
+    cb.failures = 0;
   }
 }
 
-function cbFailure() {
-  CB.failures++;
-  CB.lastCheckAt = new Date();
-  if (CB.state === 'HALF_OPEN' || CB.failures >= MAX_FAILS) {
-    CB.state    = 'OPEN';
-    CB.openedAt = Date.now();
+function cbFailure(cb) {
+  cb.failures++;
+  cb.lastCheckAt = new Date();
+  if (cb.state === 'HALF_OPEN' || cb.failures >= MAX_FAILS) {
+    cb.state    = 'OPEN';
+    cb.openedAt = Date.now();
   }
 }
 
@@ -78,27 +87,52 @@ const ACCEPTANCE_FALLBACK = { available: false, predictions: [] };
 
 exports.predictAcceptance = async function predictAcceptance(featureBatch = []) {
   if (!featureBatch.length) return ACCEPTANCE_FALLBACK;
-  if (!cbAllow()) return ACCEPTANCE_FALLBACK;
+  if (!cbAllow(CB)) return ACCEPTANCE_FALLBACK;
   try {
     const data = await httpPost('/predict-acceptance-batch', { samples: featureBatch });
-    cbSuccess();
+    cbSuccess(CB);
     return { available: true, predictions: data.predictions || [] };
   } catch (err) {
-    cbFailure();
+    cbFailure(CB);
     console.warn('[mlBridge] predictAcceptance failed:', err.message);
     return ACCEPTANCE_FALLBACK;
   }
 };
 
+// ── Public: predictCompat (batch) ─────────────────────────────────────────────
+// Independent second signal from the Polyvore-trained compatibility model
+// (see ml-service/compat_engine.py, ml-service/POLYVORE_COMPAT.md). Same
+// always-resolves/never-throws discipline as predictAcceptance, but its own
+// circuit breaker (CB_COMPAT) so the two endpoints fail independently.
+const COMPAT_FALLBACK = { available: false, predictions: [] };
+
+exports.predictCompat = async function predictCompat(featureBatch = []) {
+  if (!featureBatch.length) return COMPAT_FALLBACK;
+  if (!cbAllow(CB_COMPAT)) return COMPAT_FALLBACK;
+  try {
+    const data = await httpPost('/predict-compat-batch', { samples: featureBatch });
+    cbSuccess(CB_COMPAT);
+    return { available: true, predictions: data.predictions || [] };
+  } catch (err) {
+    cbFailure(CB_COMPAT);
+    console.warn('[mlBridge] predictCompat failed:', err.message);
+    return COMPAT_FALLBACK;
+  }
+};
+
 // ── Public: getHealth ─────────────────────────────────────────────────────────
 exports.getHealth = function getHealth() {
+  const describe = (cb) => ({
+    state:       cb.state,
+    failures:    cb.failures,
+    successes:   cb.successes,
+    openedAt:    cb.openedAt ? new Date(cb.openedAt).toISOString() : null,
+    lastCheckAt: cb.lastCheckAt,
+  });
   return {
-    state:       CB.state,
-    failures:    CB.failures,
-    successes:   CB.successes,
-    openedAt:    CB.openedAt ? new Date(CB.openedAt).toISOString() : null,
-    lastCheckAt: CB.lastCheckAt,
-    mlUrl:       ML_URL(),
+    ...describe(CB),
+    compat: describe(CB_COMPAT),
+    mlUrl:  ML_URL(),
   };
 };
 
@@ -109,6 +143,18 @@ exports.getHealth = function getHealth() {
 exports.getModelMetrics = async function getModelMetrics() {
   try {
     const { data } = await axios.get(`${ML_URL()}/model-info`, { timeout: 5000 });
+    return { reachable: true, ...data };
+  } catch (err) {
+    return { reachable: false, error: err.message };
+  }
+};
+
+// ── Public: getCompatModelMetrics ──────────────────────────────────────────────
+// Proxies the Python service's /compat-model-info — real test-set metrics for
+// the Polyvore-trained compatibility model, dataset provenance included.
+exports.getCompatModelMetrics = async function getCompatModelMetrics() {
+  try {
+    const { data } = await axios.get(`${ML_URL()}/compat-model-info`, { timeout: 5000 });
     return { reachable: true, ...data };
   } catch (err) {
     return { reachable: false, error: err.message };

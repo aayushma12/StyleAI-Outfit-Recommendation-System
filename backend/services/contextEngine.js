@@ -76,7 +76,6 @@ function buildProfileSection(user) {
     user.occasionPreferences?.length && `Frequent occasions: ${user.occasionPreferences.join(', ')}`,
     user.accessoryStyle              && `Accessory style: ${user.accessoryStyle}`,
     user.footwearPreferences?.length && `Footwear preferences: ${user.footwearPreferences.join(', ')}`,
-    user.budgetRange?.max            && `Budget range: NPR ${user.budgetRange.min || 0}–${user.budgetRange.max}`,
     user.additionalStyleNotes        && `Style notes: ${user.additionalStyleNotes}`,
   ].filter(Boolean).join('\n') || 'Minimal profile — use general fashion principles for young women in Kathmandu.';
 }

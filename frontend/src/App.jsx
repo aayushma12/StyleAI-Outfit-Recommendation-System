@@ -11,8 +11,6 @@ const Onboarding     = lazy(() => import('./pages/Onboarding'));
 const Dashboard      = lazy(() => import('./pages/Dashboard'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
-const ResetPassword  = lazy(() => import('./pages/ResetPassword'));
-const VerifyEmail    = lazy(() => import('./pages/VerifyEmail'));
 const NotFound       = lazy(() => import('./pages/NotFound'));
 const Unauthorized   = lazy(() => import('./pages/Unauthorized'));
 const LegalInfo      = lazy(() => import('./pages/LegalInfo'));
@@ -90,7 +88,6 @@ const AppRoutes = () => (
         element={<PublicRoute><Landing /></PublicRoute>} />
 
       {/* ── Always-public (no auth check needed) ── */}
-      <Route path="/verify-email/:token"   element={<VerifyEmail />} />
       <Route path="/unauthorized"          element={<Unauthorized />} />
       <Route path="/legal"                 element={<LegalInfo />} />
       <Route path="/evaluation"            element={<Evaluation />} />
@@ -102,8 +99,6 @@ const AppRoutes = () => (
         element={<PublicRoute><Register /></PublicRoute>} />
       <Route path="/forgot-password"
         element={<PublicRoute><ForgotPassword /></PublicRoute>} />
-      <Route path="/reset-password/:token"
-        element={<PublicRoute><ResetPassword /></PublicRoute>} />
 
       {/* ── Authenticated user only ── */}
       <Route path="/onboarding"

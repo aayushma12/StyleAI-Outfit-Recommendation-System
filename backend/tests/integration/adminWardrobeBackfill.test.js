@@ -14,7 +14,7 @@ async function mkAdminToken() {
   const email = `admin-backfill-${Date.now()}-${Math.random()}@example.com`;
   await User.create({
     name: 'Test Admin', email, password: ADMIN_PASSWORD,
-    consentGiven: true, role: 'admin', emailVerified: true,
+    consentGiven: true, role: 'admin',
   });
   const res = await request(app).post('/api/auth/login').send({ email, password: ADMIN_PASSWORD });
   return res.body.token;
